@@ -116,7 +116,7 @@ async def test_waifu_and_yuzuwaifu_share_daily_quota(monkeypatch, tmp_path) -> N
         commands._cmd_waifu(matcher, _FakeEvent(123), "", source="yuzu")
     )
     assert len(calls) == 1
-    assert "已经抽过了" not in str(matcher.sent[-1])
+    assert "已经抽过" in str(matcher.sent[-1])
 
 
 async def test_draw_uses_fresh_cache(monkeypatch, tmp_path) -> None:
@@ -331,6 +331,7 @@ async def test_waifu_and_yuzuwaifu_share_local_quota(
     record = waifu.get_today_waifu(123)
     assert record is not None and record["source"] == "waifu"
     assert "base64://" in str(matcher.sent[-1])
+    assert "已经抽过" in str(matcher.sent[-1])
 
 
 async def test_legacy_waifu_record_renders_card_by_character_id(
@@ -354,7 +355,7 @@ async def test_legacy_waifu_record_renders_card_by_character_id(
     matcher = _FakeMatcher()
     await _run(commands._cmd_waifu(matcher, _FakeEvent(123), ""))
 
-    assert "已经抽过了" not in str(matcher.sent[-1])
+    assert "已经抽过" in str(matcher.sent[-1])
     assert "base64://" in str(matcher.sent[-1])
 
 

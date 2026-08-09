@@ -266,11 +266,21 @@ async def _cmd_waifu(
                 )
             if local is not None:
                 reply_image = await _local_reply_image(local, reply_image or "")
+            if existing.get("source") == "yuzu":
+                repeat_note = (
+                    "你今天已经抽过 /yuzuwaifu 了，"
+                    "这是你今天的柚子社老婆（重复展示）"
+                )
+            else:
+                repeat_note = (
+                    "你今天已经抽过 /waifu 了，"
+                    "这是你今天的每日老婆（重复展示）"
+                )
             await matcher.finish(
                 _waifu_reply(
                     event,
                     reply_image,
-                    "",
+                    repeat_note,
                 )
             )
         settings = waifu.load_settings()
