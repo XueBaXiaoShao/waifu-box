@@ -120,8 +120,13 @@ def _draw_info_line(
     ) + 8
 
 
-def _paste_cover(canvas: Image.Image, image_bytes: bytes, area: tuple[int, int, int, int]) -> None:
-    """把角色立绘等比缩放到左侧区域并居中。"""
+def _paste_cover(
+    canvas: Image.Image,
+    image_bytes: bytes,
+    area: tuple[int, int, int, int],
+    radius: int = 28,
+) -> None:
+    """把角色立绘放大铺满左侧区域，居中裁切并应用圆角遮罩。"""
     left, top, right, bottom = area
     target_w = right - left
     target_h = bottom - top
@@ -129,15 +134,30 @@ def _paste_cover(canvas: Image.Image, image_bytes: bytes, area: tuple[int, int, 
         portrait = Image.open(BytesIO(image_bytes)).convert("RGBA")
     except Exception:
         return
-    scale = min(target_w / portrait.width, target_h / portrait.height)
+    scale = max(target_w / portrait.width, target_h / portrait.height)
     new_size = (
         max(1, int(portrait.width * scale)),
         max(1, int(portrait.height * scale)),
     )
     portrait = portrait.resize(new_size, Image.LANCZOS)
-    x = left + (target_w - new_size[0]) // 2
-    y = top + (target_h - new_size[1]) // 2
-    canvas.paste(portrait, (x, y), portrait)
+    crop_x = (new_size[0] - target_w) // 2
+    crop_y = (new_size[1] - target_h) // 2
+    portrait = portrait.crop(
+        (
+            crop_x,
+            crop_y,
+            crop_x + target_w,
+            crop_y + target_h,
+        )
+    )
+
+    mask = Image.new("L", (target_w, target_h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, target_w - 1, target_h - 1),
+        radius=radius,
+        fill=255,
+    )
+    canvas.paste(portrait, (left, top), mask)
 
 
 def _paste_logo(canvas: Image.Image, company_ids: list[str] | None) -> None:
