@@ -252,6 +252,11 @@ def render_card(
         or str(character.data.get("jp_description") or "")
     ).strip()
     if not intro:
+        tags = character.data.get("tags") or []
+        tag_names = [str(tag.get("name")) for tag in tags if tag.get("name")]
+        if tag_names:
+            intro = "角色特征：" + "、".join(tag_names[:10]) + "。"
+    if not intro:
         intro = "暂无简介"
     if len(intro) > 700:
         intro = intro[:700].rsplit(" ", 1)[0] + "……"

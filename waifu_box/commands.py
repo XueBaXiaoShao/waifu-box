@@ -129,7 +129,8 @@ def _message_with_image(image_url: str | None, text: str) -> Message:
     image = _image_segment(image_url)
     if image is not None:
         segments.append(image)
-    segments.append(MessageSegment.text(text))
+    if text:
+        segments.append(MessageSegment.text(text))
     return Message(segments)
 
 
@@ -262,14 +263,19 @@ async def _cmd_waifu(
                     reply_image = await _local_reply_image(
                         local, reply_image or ""
                     )
+            text = (
+                _waifu_text(
+                    existing,
+                    "你今天已经抽过了，明天再来（重复展示今日老婆）",
+                )
+                if source == "yuzu"
+                else ""
+            )
             await matcher.finish(
                 _waifu_reply(
                     event,
                     reply_image,
-                    _waifu_text(
-                        existing,
-                        "你今天已经抽过了，明天再来（重复展示今日老婆）",
-                    ),
+                    text,
                 )
             )
         settings = waifu.load_settings()
@@ -298,7 +304,11 @@ async def _cmd_waifu(
             waifu_usage.mark_used(character.id)
             image_url = await _local_reply_image(local, record.get("image_url") or "")
         await matcher.finish(
-            _waifu_reply(event, image_url, _waifu_text(record))
+            _waifu_reply(
+                event,
+                image_url,
+                _waifu_text(record) if source == "yuzu" else "",
+            )
         )
         return
 
@@ -334,7 +344,11 @@ async def _cmd_waifu(
             _waifu_reply(
                 event,
                 image_url,
-                _waifu_text(record, "管理员已更换，这是你的新老婆"),
+                (
+                    _waifu_text(record, "管理员已更换，这是你的新老婆")
+                    if source == "yuzu"
+                    else ""
+                ),
             )
         )
     elif command == "set":

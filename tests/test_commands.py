@@ -274,6 +274,7 @@ async def test_waifu_draws_from_local_library_and_sends_card(
     assert record["library_path"].endswith("ヒロイン.json")
     assert waifu_usage.last_used("c1") is not None
     assert "base64://" in str(matcher.sent[-1])
+    assert "你今天的老婆" not in str(matcher.sent[-1])
 
 
 async def test_legacy_waifu_record_renders_card_by_character_id(
@@ -297,7 +298,7 @@ async def test_legacy_waifu_record_renders_card_by_character_id(
     matcher = _FakeMatcher()
     await _run(commands._cmd_waifu(matcher, _FakeEvent(123), ""))
 
-    assert "已经抽过了" in str(matcher.sent[-1])
+    assert "已经抽过了" not in str(matcher.sent[-1])
     assert "base64://" in str(matcher.sent[-1])
 
 
