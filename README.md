@@ -8,7 +8,7 @@
 | 命令 | 说明 |
 | --- | --- |
 | `/waifu` | 从 `final_company_library` 抽每日老婆，生成角色信息卡片（左立绘 / 右信息简介 / 右下会社 logo） |
-| `/yuzuwaifu` | 柚子社专属老婆（固定 Yuzusoft，保持原有输出，与 `/waifu` 每天二选一） |
+| `/yuzuwaifu` | 柚子社专属老婆（固定 Yuzusoft，同样输出角色卡片，与 `/waifu` 共享每日额度） |
 | `/waifu settings` | 查看/修改抽卡设置（热度、年代、全局会社池；仅管理员） |
 | `/waifu settings pool set|off` | 设置 final_company_library 全量会社池 / 关闭 |
 | `/waifu settings group=<群号> kaisha=<会社key|off>` | 群会社后门 |
@@ -24,12 +24,13 @@
 - `/waifu` 用 Pillow 合成角色信息卡片：左侧为立绘，右侧为角色信息与简介，
   右下角按 `company_ids` 从 `company_logos` 匹配来源会社 logo；
 - 旧版 15 家默认会社池会自动迁移为本地库全量 48 家会社池；
-- 热度阈值只作用于 `/yuzuwaifu`（`final_company_library` 无投票数字段）；
-- `/yuzuwaifu` 保持随机，不参与 LRU；
-- `/yuzuwaifu` 的实时查询结果按会社写入本地缓存 `data/waifu_cache.json`，
-  当天有新鲜缓存时不请求 VNDB；
-- 每天 `WAIFU_CACHE_REFRESH_TIME`（默认 04:00）增量刷新 yuzuwaifu 的 VNDB
-  缓存：已有角色的作品跳过接口，只查新作品；
+- 热度阈值暂不生效（`final_company_library` 无投票数字段）；
+- `/yuzuwaifu` 在本地库中固定抽柚子社，同样输出卡片、保持随机、不参与 LRU；
+- `/waifu` 与 `/yuzuwaifu` 共享每日额度，二者当天二选一；
+- 本地库不可用时回退 VNDB；回退查询结果仍按会社写入
+  `data/waifu_cache.json`，当天有新鲜缓存时不请求 VNDB；
+- 每天 `WAIFU_CACHE_REFRESH_TIME`（默认 04:00）增量刷新回退用的 VNDB 缓存：
+  已有角色的作品跳过接口，只查新作品；
 - 管理员名单复用 `data/admin_ids.json`（与 x_admin/galgame-box 共用）；
 - 分群开关复用 `data/plugin_switches.json` 的 `waifu_box` 键。
 

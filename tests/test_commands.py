@@ -116,8 +116,7 @@ async def test_waifu_and_yuzuwaifu_share_daily_quota(monkeypatch, tmp_path) -> N
         commands._cmd_waifu(matcher, _FakeEvent(123), "", source="yuzu")
     )
     assert len(calls) == 1
-    assert "已经抽过了" in str(matcher.sent[-1])
-    assert "waifu" not in str(matcher.sent[-1])
+    assert "已经抽过了" not in str(matcher.sent[-1])
 
 
 async def test_draw_uses_fresh_cache(monkeypatch, tmp_path) -> None:
@@ -275,6 +274,63 @@ async def test_waifu_draws_from_local_library_and_sends_card(
     assert waifu_usage.last_used("c1") is not None
     assert "base64://" in str(matcher.sent[-1])
     assert "你今天的老婆" not in str(matcher.sent[-1])
+
+
+async def test_yuzuwaifu_draws_local_yuzusoft_card(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path / "data"))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path / "data"))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    async def fake_render(character):
+        return b"JPEG-YUZU"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(
+        commands._cmd_waifu(
+            matcher, _FakeEvent(123), "", source="yuzu"
+        )
+    )
+
+    record = waifu.get_today_waifu(123)
+    assert record is not None
+    assert record["source"] == "yuzu"
+    assert record["character_id"] == "c1"
+    assert record["library_path"].endswith("ヒロイン.json")
+    assert waifu_usage.last_used("c1") is None
+    assert "base64://" in str(matcher.sent[-1])
+
+
+async def test_waifu_and_yuzuwaifu_share_local_quota(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path / "data"))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path / "data"))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    async def fake_render(character):
+        return b"JPEG-CARD"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), ""))
+    assert waifu.get_today_waifu(123)["source"] == "waifu"
+
+    await _run(
+        commands._cmd_waifu(matcher, _FakeEvent(123), "", source="yuzu")
+    )
+    record = waifu.get_today_waifu(123)
+    assert record is not None and record["source"] == "waifu"
+    assert "base64://" in str(matcher.sent[-1])
 
 
 async def test_legacy_waifu_record_renders_card_by_character_id(

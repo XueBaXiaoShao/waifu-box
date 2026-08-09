@@ -1,7 +1,8 @@
 """每日老婆独立插件：/waifu 与 /yuzuwaifu。
 
-/waifu 基于本地 final_company_library 抽卡并生成角色信息卡片，/yuzuwaifu
-保持柚子社 VNDB 原行为；支持 LRU 轮换、每日缓存刷新、群级后门与会社池。
+/waifu 与 /yuzuwaifu 都基于本地 final_company_library 抽卡并生成角色信息
+卡片（/yuzuwaifu 固定柚子社），两者共享每日额度；支持 LRU 轮换、群级后门
+与会社池。
 """
 
 from nonebot.plugin import PluginMetadata
@@ -12,8 +13,8 @@ from .scheduler import setup_cache_refresh
 __plugin_meta__ = PluginMetadata(
     name="每日老婆（waifu-box）",
     description=(
-        "本地 final_company_library 角色卡 /waifu 与柚子社 /yuzuwaifu，"
-        "LRU 轮换、本地缓存、每日定时刷新"
+        "本地 final_company_library 角色卡 /waifu 与 /yuzuwaifu（柚子社），"
+        "共享每日额度、LRU 轮换、群级后门与会社池"
     ),
     usage=(
         "/waifu、/yuzuwaifu、/waifu settings、/waifu reset、"

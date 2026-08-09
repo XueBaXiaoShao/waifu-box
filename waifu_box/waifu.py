@@ -121,7 +121,7 @@ def settings_text(settings: dict[str, Any]) -> str:
     )
     return (
         "【每日老婆设置】\n"
-        f"热度阈值：{threshold}（仅 /yuzuwaifu 生效；0=关闭）\n"
+        f"热度阈值：{threshold}（本地库无投票数字段，暂不生效）\n"
         f"年代范围：{year_from or '不限'} - {year_to or '不限'}\n"
         f"全局会社池：{pool_names or '不限'}\n"
         "用法：\n"
