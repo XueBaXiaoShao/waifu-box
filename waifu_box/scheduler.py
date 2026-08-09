@@ -44,22 +44,9 @@ def setup_cache_refresh() -> bool:
     async def _refresh() -> None:
         import asyncio
 
-        from . import commands, vndb, waifu
+        from . import commands, vndb
 
-        settings = waifu.load_settings()
-        groups = settings.get("pool_company_ids") or {}
         tasks = []
-        if isinstance(groups, dict):
-            for key in settings.get("pool_companies") or []:
-                ids = groups.get(key) or []
-                if ids:
-                    tasks.append(
-                        vndb.refresh_company_cache(
-                            key,
-                            [str(item) for item in ids],
-                            vn_limit=config.cache_vn_limit,
-                        )
-                    )
         try:
             yuzu_ids = await commands._yuzusoft_ids()
         except Exception:
@@ -80,7 +67,7 @@ def setup_cache_refresh() -> bool:
         total_skip = sum(result.get("skipped", 0) for result in ok)
         failed = sum(1 for result in results if not isinstance(result, dict))
         logger.info(
-            "waifu 缓存刷新完成：新增 {} 角色，跳过 {} 个已有作品，失败 {} 个会社",
+            "yuzuwaifu 缓存刷新完成：新增 {} 角色，跳过 {} 个已有作品，失败 {} 个会社",
             total_new,
             total_skip,
             failed,

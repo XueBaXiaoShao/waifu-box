@@ -33,6 +33,9 @@ class Config:
 
     # 数据目录（与 x_admin/galgame-box 共用，默认 /app/data）
     data_dir: str = "data"
+    # final_company_library / company_logos 资源目录
+    library_dir: str = "data/final_company_library"
+    logo_dir: str = "data/company_logos"
     # 请求超时（秒）与重试次数
     request_timeout: int = 30
     request_retries: int = 3
@@ -43,11 +46,20 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
+        data_dir = (
+            _env_str("WAIFU_DATA_DIR")
+            or _env_str("LOCALSTORE_DATA_DIR")
+            or "data"
+        )
         return cls(
-            data_dir=(
-                _env_str("WAIFU_DATA_DIR")
-                or _env_str("LOCALSTORE_DATA_DIR")
-                or "data"
+            data_dir=data_dir,
+            library_dir=(
+                _env_str("WAIFU_LIBRARY_DIR")
+                or f"{data_dir}/final_company_library"
+            ),
+            logo_dir=(
+                _env_str("WAIFU_LOGO_DIR")
+                or f"{data_dir}/company_logos"
             ),
             request_timeout=_env_int("WAIFU_REQUEST_TIMEOUT", 30),
             request_retries=_env_int("WAIFU_REQUEST_RETRIES", 3),

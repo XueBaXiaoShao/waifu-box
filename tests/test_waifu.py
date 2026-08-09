@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from waifu_box import waifu
+import json
+
+from waifu_box import companies, waifu
 from waifu_box.models import Image, VNDBCharacter, VnRef
 
 
@@ -45,6 +47,42 @@ def test_settings_round_trip(tmp_path, monkeypatch) -> None:
     settings = waifu.load_settings()
     assert settings["popular_threshold"] == 5000
     assert settings["pool_company_ids"] == {"key": ["p1"]}
+
+
+def test_legacy_default_pool_migrates_to_full_library(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(
+        waifu.library.config,
+        "library_dir",
+        str(tmp_path / "no_library"),
+    )
+    waifu.library.reset_cache()
+
+    def fake_resolve(search_names):
+        return ["p1"]
+
+    monkeypatch.setattr(waifu.library, "resolve_company_ids", fake_resolve)
+    (tmp_path / "waifu_settings.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "popular_threshold": 0,
+                "year_from": 0,
+                "year_to": 0,
+                "pool_companies": list(companies.LEGACY_WAIFU_POOL_KEYS),
+                "pool_company_ids": {
+                    key: ["p1"] for key in companies.LEGACY_WAIFU_POOL_KEYS
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = waifu.load_settings()
+    assert settings["pool_companies"] == list(companies.WAIFU_POOL_KEYS)
+    assert all(settings["pool_company_ids"][key] for key in companies.WAIFU_POOL_KEYS)
 
 
 def test_group_backdoors(tmp_path, monkeypatch) -> None:

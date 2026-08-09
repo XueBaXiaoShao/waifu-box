@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nonebot-plugin-waifu-box"
 version = "0.1.0"
-description = "每日老婆独立插件：VNDB 角色抽卡（waifu/yuzuwaifu）、LRU 轮换、本地缓存与定时刷新"
+description = "每日老婆独立插件：final_company_library 本地抽卡并生成角色信息卡片（waifu/yuzuwaifu）"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -20,3 +20,6 @@ dependencies = [
 
 [tool.setuptools]
 packages = ["waifu_box"]
+
+[tool.setuptools.package-data]
+waifu_box = ["assets/fonts/*.otf"]

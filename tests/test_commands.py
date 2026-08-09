@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from nonebot.adapters.onebot.v11 import Message
 
-from waifu_box import commands, http, vndb, waifu, waifu_cache, waifu_usage
+from waifu_box import (
+    commands,
+    http,
+    library,
+    vndb,
+    waifu,
+    waifu_cache,
+    waifu_usage,
+)
 from waifu_box.models import Image, VNDBCharacter, VnRef
 
 
@@ -83,6 +92,10 @@ def test_group_switch_disables(tmp_path, monkeypatch) -> None:
 async def test_waifu_and_yuzuwaifu_share_daily_quota(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
     monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(
+        library.config, "library_dir", str(tmp_path / "no_library")
+    )
+    library.reset_cache()
     picks = [_character("c1"), _character("c2")]
     calls = []
 
@@ -135,6 +148,10 @@ async def test_draw_uses_fresh_cache(monkeypatch, tmp_path) -> None:
 async def test_draw_marks_usage_for_waifu_not_yuzu(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
     monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(
+        library.config, "library_dir", str(tmp_path / "no_library")
+    )
+    library.reset_cache()
     picks = [_character("c5"), _character("c6")]
 
     async def fake_random(**kwargs):
@@ -159,10 +176,10 @@ async def test_pool_settings_admin(monkeypatch, tmp_path) -> None:
         json.dumps({"version": 2, "admins": [999]}), encoding="utf-8"
     )
 
-    async def fake_resolve(search_names):
+    def fake_resolve(search_names):
         return ["p1"]
 
-    monkeypatch.setattr(vndb, "resolve_company_ids", fake_resolve)
+    monkeypatch.setattr(library, "resolve_company_ids", fake_resolve)
     matcher = _FakeMatcher()
     await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "settings pool set"))
 
@@ -179,6 +196,84 @@ async def test_failure_reports_message(monkeypatch) -> None:
     matcher = _FakeMatcher()
     await _run(commands.handle_waifu_short(_FakeEvent(1), matcher, Message("")))
     assert "抽卡失败" in str(matcher.sent[-1])
+
+
+def _build_fake_library(root: Path) -> None:
+    company_dir = root / "ゆずソフト"
+    company_dir.mkdir(parents=True, exist_ok=True)
+    (company_dir / "公司索引.json").write_text(
+        json.dumps(
+            {
+                "id": "p98",
+                "name": "ゆずソフト",
+                "vndb_name": "Yuzusoft",
+                "original": "ゆずソフト",
+            }
+        ),
+        encoding="utf-8",
+    )
+    game_dir = company_dir / "喫茶ステラと死神の蝶"
+    game_dir.mkdir(parents=True, exist_ok=True)
+    (game_dir / "游戏介绍.json").write_text(
+        json.dumps(
+            {
+                "id": "v1",
+                "title": "Café Stella",
+                "jp_title": "喫茶ステラと死神の蝶",
+                "cn_title": "星光咖啡馆",
+                "released": "2020-09-24",
+                "company_ids": ["p98"],
+                "character_ids": ["c1"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    character_dir = game_dir / "角色"
+    character_dir.mkdir(parents=True, exist_ok=True)
+    (character_dir / "ヒロイン.json").write_text(
+        json.dumps(
+            {
+                "id": "c1",
+                "name": "ヒロイン",
+                "vndb_name": "Heroine",
+                "display_name": "ヒロイン",
+                "cn_name": "女主角",
+                "sex": "female",
+                "role": "main",
+                "company_ids": ["p98"],
+                "image": {"url": "https://t.vndb.org/ch/1/1.jpg"},
+                "description": "A lovely heroine.",
+                "cn_description": "可爱的主角。",
+                "cv": ["声优A"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+async def test_waifu_draws_from_local_library_and_sends_card(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path / "data"))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path / "data"))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    async def fake_render(character):
+        return b"JPEG-CARD"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), ""))
+
+    record = waifu.get_today_waifu(123)
+    assert record is not None
+    assert record["character_id"] == "c1"
+    assert record["library_path"].endswith("ヒロイン.json")
+    assert waifu_usage.last_used("c1") is not None
+    assert "base64://" in str(matcher.sent[-1])
 
 
 class _FakeAsync:

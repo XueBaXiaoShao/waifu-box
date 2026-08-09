@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from . import companies
+from . import companies, library
 from .config import config
 from .models import VNDBCharacter
 
@@ -82,6 +82,17 @@ def load_settings() -> dict[str, Any]:
                 }
             elif isinstance(value, list):
                 settings[key] = [str(item) for item in value if str(item).strip()]
+    # 旧版 15 家默认池自动迁移为 final_company_library 全量会社池
+    if tuple(settings.get("pool_companies") or []) == companies.LEGACY_WAIFU_POOL_KEYS:
+        settings["pool_companies"] = list(companies.WAIFU_POOL_KEYS)
+        groups: dict[str, list[str]] = {}
+        for key in companies.WAIFU_POOL_KEYS:
+            search_names = [
+                str(name) for name in companies.COMPANIES[key]["search"]
+            ]
+            groups[key] = library.resolve_company_ids(search_names)
+        settings["pool_company_ids"] = groups
+        save_settings(settings)
     return settings
 
 
@@ -110,7 +121,7 @@ def settings_text(settings: dict[str, Any]) -> str:
     )
     return (
         "【每日老婆设置】\n"
-        f"热度阈值：{threshold}（只抽 VNDB 投票数≥该值的作品角色；0=关闭）\n"
+        f"热度阈值：{threshold}（仅 /yuzuwaifu 生效；0=关闭）\n"
         f"年代范围：{year_from or '不限'} - {year_to or '不限'}\n"
         f"全局会社池：{pool_names or '不限'}\n"
         "用法：\n"
@@ -215,7 +226,10 @@ def get_today_waifu(user_id: int) -> dict[str, Any] | None:
 
 
 def save_waifu(
-    user_id: int, character: VNDBCharacter, source: str = "waifu"
+    user_id: int,
+    character: VNDBCharacter,
+    source: str = "waifu",
+    library_path: str | None = None,
 ) -> dict[str, Any]:
     """保存（或覆盖）用户今天的每日老婆；source 区分普通 waifu / yuzuwaifu。"""
     record: dict[str, Any] = {
@@ -231,6 +245,8 @@ def save_waifu(
             for vn in (character.vns or [])[:5]
         ],
     }
+    if library_path:
+        record["library_path"] = library_path
     with _lock:
         payload = _load()
         payload.setdefault("users", {})[str(user_id)] = record

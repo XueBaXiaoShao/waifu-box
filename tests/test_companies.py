@@ -39,6 +39,31 @@ def test_catalog_contains_expected_companies() -> None:
         "keroq",
         "makura",
         "cabbagesoft",
+        "acacia",
+        "crystalia",
+        "cube",
+        "hermit",
+        "heliodor",
+        "innocentgrey",
+        "mages",
+        "overdrive",
+        "pulltop",
+        "qruppo",
+        "tactics",
+        "elf",
+        "akabeisoft2",
+        "akabeisoft3",
+        "syangrila",
+        "uguisukagura",
+        "eushully",
+        "silkyplusdolce",
+        "silkypluswasabi",
+        "totometori",
+        "flyingshine",
+        "kogado",
+        "giga",
+        "akatsuki",
+        "entergram",
     }
     assert set(companies.COMPANIES) == expected
 
@@ -60,6 +85,9 @@ def test_waifu_pool_keys_cover_requested_companies() -> None:
     assert "keroq" in pool
     assert "makura" in pool
     assert "cabbagesoft" in pool
+    assert "mages" in pool
+    assert "crystalia" in pool
+    assert "entergram" in pool
 
 
 def test_catalog_includes_subsidiary_search_names() -> None:

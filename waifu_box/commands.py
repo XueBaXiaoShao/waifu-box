@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import random
@@ -14,8 +15,10 @@ from nonebot.matcher import Matcher
 from nonebot.params import CommandArg
 
 from . import (
+    card,
     companies,
     http,
+    library,
     permissions,
     vndb,
     waifu,
@@ -23,7 +26,7 @@ from . import (
     waifu_usage,
 )
 from .config import config
-from .models import VNDBCharacter
+from .models import Image, VNDBCharacter, VnRef
 
 
 def _is_slash_waifu(event: MessageEvent) -> bool:
@@ -72,13 +75,13 @@ yuzuwaifu_short = on_command(
 
 def _help_text() -> str:
     return """【每日老婆】
-- /waifu —— 抽每日老婆（每人每天一次；可选 reroll/set/reset，管理员可用）
+- /waifu —— 从本地 VNDB 资料库抽每日老婆，并生成角色信息卡片
 - /waifu settings —— 查看/修改抽卡设置（热度、年代、全局会社池；仅管理员）
 - /waifu settings group=<群号> kaisha=<会社key|off> —— 群会社后门
 - /waifu settings group=<群号> year=off|on —— 该群解除/恢复年代限制
 - /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
 - /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
-- /yuzuwaifu —— 柚子社专属老婆（固定柚子社；与 /waifu 每天二选一）"""
+- /yuzuwaifu —— 柚子社专属老婆（固定柚子社，行为保持不变；与 /waifu 每天二选一）"""
 
 
 @waifu_short.handle()
@@ -115,6 +118,8 @@ def _image_segment(url_or_base64: str | None) -> MessageSegment | None:
     if not url_or_base64:
         return None
     if url_or_base64.startswith("http"):
+        return MessageSegment.image(url_or_base64)
+    if url_or_base64.startswith("base64://"):
         return MessageSegment.image(url_or_base64)
     return MessageSegment.image(f"base64://{url_or_base64}")
 
@@ -165,6 +170,61 @@ def _waifu_text(record: dict, note: str = "") -> str:
     return "\n".join(lines)
 
 
+def _to_vndb_character(character: library.LibraryCharacter) -> VNDBCharacter:
+    """把本地资料库角色转成现有保存/展示模型。"""
+    return VNDBCharacter(
+        id=character.id,
+        name=character.name,
+        original=character.original,
+        image=Image(url=character.image_url),
+        vns=[
+            VnRef(
+                id=character.game.id,
+                title=character.game.jp_title or character.game.title,
+            )
+        ],
+    )
+
+
+async def _local_reply_image(
+    character: library.LibraryCharacter,
+    fallback_url: str = "",
+) -> str:
+    """渲染本地角色卡片；失败时回退到原立绘 URL。"""
+    image_bytes = await card.render_character_card(character)
+    if image_bytes:
+        return f"base64://{card.base64_image(image_bytes)}"
+    return fallback_url
+
+
+def _library_path(character: library.LibraryCharacter) -> str:
+    root = Path(config.library_dir)
+    try:
+        return character.path.relative_to(root).as_posix()
+    except ValueError:
+        return character.path.name
+
+
+async def _draw_local_character(
+    settings: dict,
+    group_settings: dict,
+) -> library.LibraryCharacter | None:
+    """从 final_company_library 抽卡：优先群会社后门，其次全局会社池。"""
+    year_from = 0 if group_settings["year_off"] else settings.get("year_from", 0)
+    year_to = 0 if group_settings["year_off"] else settings.get("year_to", 0)
+    if group_settings["company_ids"]:
+        company_ids = [str(item) for item in group_settings["company_ids"]]
+    else:
+        _, company_ids = _pick_pool_company(settings)
+    return await asyncio.to_thread(
+        library.random_character,
+        company_ids=company_ids or None,
+        year_from=year_from,
+        year_to=year_to,
+        lru=True,
+    )
+
+
 async def _cmd_waifu(
     matcher: Matcher,
     event: MessageEvent,
@@ -185,10 +245,20 @@ async def _cmd_waifu(
     if not value:
         existing = waifu.get_today_waifu(user_id)
         if existing:
+            reply_image = existing.get("image_url")
+            if existing.get("source") != "yuzu" and existing.get("library_path"):
+                local = await asyncio.to_thread(
+                    library.get_character_by_path,
+                    str(existing["library_path"]),
+                )
+                if local is not None:
+                    reply_image = await _local_reply_image(
+                        local, reply_image or ""
+                    )
             await matcher.finish(
                 _waifu_reply(
                     event,
-                    existing.get("image_url"),
+                    reply_image,
                     _waifu_text(
                         existing,
                         "你今天已经抽过了，明天再来（重复展示今日老婆）",
@@ -197,14 +267,31 @@ async def _cmd_waifu(
             )
         settings = waifu.load_settings()
         group_settings = _event_group_settings(event)
-        character = await _draw_waifu_character(settings, group_settings, source)
-        if character is None:
-            await matcher.finish("今天暂时抽不到老婆，请稍后再试")
-        record = waifu.save_waifu(user_id, character, source=source)
-        if source != "yuzu":
+        if source == "yuzu" or not await asyncio.to_thread(library.ensure_index):
+            character = await _draw_waifu_character(
+                settings, group_settings, source
+            )
+            if character is None:
+                await matcher.finish("今天暂时抽不到老婆，请稍后再试")
+            record = waifu.save_waifu(user_id, character, source=source)
+            if source != "yuzu":
+                waifu_usage.mark_used(character.id)
+            image_url = record.get("image_url")
+        else:
+            local = await _draw_local_character(settings, group_settings)
+            if local is None:
+                await matcher.finish("今天暂时抽不到老婆，请稍后再试")
+            character = _to_vndb_character(local)
+            record = waifu.save_waifu(
+                user_id,
+                character,
+                source=source,
+                library_path=_library_path(local),
+            )
             waifu_usage.mark_used(character.id)
+            image_url = await _local_reply_image(local, record.get("image_url") or "")
         await matcher.finish(
-            _waifu_reply(event, record.get("image_url"), _waifu_text(record))
+            _waifu_reply(event, image_url, _waifu_text(record))
         )
         return
 
@@ -213,16 +300,33 @@ async def _cmd_waifu(
             await matcher.finish("只有管理员可以更换每日老婆")
         settings = waifu.load_settings()
         group_settings = _event_group_settings(event)
-        character = await _draw_waifu_character(settings, group_settings, source)
-        if character is None:
-            await matcher.finish("更换失败，请稍后再试")
-        record = waifu.save_waifu(user_id, character, source=source)
-        if source != "yuzu":
+        if source == "yuzu" or not await asyncio.to_thread(library.ensure_index):
+            character = await _draw_waifu_character(
+                settings, group_settings, source
+            )
+            if character is None:
+                await matcher.finish("更换失败，请稍后再试")
+            record = waifu.save_waifu(user_id, character, source=source)
+            if source != "yuzu":
+                waifu_usage.mark_used(character.id)
+            image_url = record.get("image_url")
+        else:
+            local = await _draw_local_character(settings, group_settings)
+            if local is None:
+                await matcher.finish("更换失败，请稍后再试")
+            character = _to_vndb_character(local)
+            record = waifu.save_waifu(
+                user_id,
+                character,
+                source=source,
+                library_path=_library_path(local),
+            )
             waifu_usage.mark_used(character.id)
+            image_url = await _local_reply_image(local, record.get("image_url") or "")
         await matcher.finish(
             _waifu_reply(
                 event,
-                record.get("image_url"),
+                image_url,
                 _waifu_text(record, "管理员已更换，这是你的新老婆"),
             )
         )
@@ -237,17 +341,38 @@ async def _cmd_waifu(
         if first.isdigit() and rest:
             target_user_id = int(first)
             keyword = rest.strip()
-        if re.match(r"^c\d+$", keyword, re.IGNORECASE):
-            try:
-                character = await vndb.get_by_id(keyword.lower())
-            except Exception:
-                character = None
+        local: library.LibraryCharacter | None = None
+        if source != "yuzu":
+            local_items = await asyncio.to_thread(
+                library.search_characters, keyword, 1
+            )
+            local = local_items[0] if local_items else None
+        if local is None:
+            if re.match(r"^c\d+$", keyword, re.IGNORECASE):
+                try:
+                    character = await vndb.get_by_id(keyword.lower())
+                except Exception:
+                    character = None
+            else:
+                items = await vndb.search_character(keyword, 1)
+                character = items[0] if items else None
         else:
-            items = await vndb.search_character(keyword, 1)
-            character = items[0] if items else None
-        if character is None:
+            character = None
+        if local is None and character is None:
             await matcher.finish(f"未找到角色：{keyword}")
-        record = waifu.save_waifu(target_user_id, character)
+        if local is not None:
+            record = waifu.save_waifu(
+                target_user_id,
+                _to_vndb_character(local),
+                source=source,
+                library_path=_library_path(local),
+            )
+            image_url = await _local_reply_image(
+                local, record.get("image_url") or ""
+            )
+        else:
+            record = waifu.save_waifu(target_user_id, character)
+            image_url = record.get("image_url")
         note = (
             f"已为用户 {target_user_id} 设置老婆"
             if target_user_id != user_id
@@ -256,7 +381,7 @@ async def _cmd_waifu(
         await matcher.finish(
             _waifu_reply(
                 event,
-                record.get("image_url"),
+                image_url,
                 _waifu_text(record, note),
                 at_user_id=target_user_id if target_user_id != user_id else None,
             )
@@ -464,7 +589,7 @@ async def _handle_waifu_settings(
                 str(name) for name in companies.COMPANIES[key]["search"]
             ]
             try:
-                groups[key] = await vndb.resolve_company_ids(search_names)
+                groups[key] = library.resolve_company_ids(search_names)
             except Exception:
                 groups[key] = []
         settings["pool_companies"] = list(companies.WAIFU_POOL_KEYS)
@@ -473,7 +598,7 @@ async def _handle_waifu_settings(
         total = sum(len(ids) for ids in groups.values())
         await matcher.finish(
             f"已设置全局会社池：{companies.display_names(list(companies.WAIFU_POOL_KEYS))}"
-            f"（{len(groups)} 家会社，共 {total} 个 VNDB 厂商；抽卡时随机选一家）"
+            f"（{len(groups)} 家会社，共 {total} 个本地厂商；抽卡时随机选一家）"
         )
     if action == "reset":
         waifu.save_settings(waifu.default_settings())
@@ -535,9 +660,9 @@ async def _handle_group_kaisha(
             f"未知会社：{kaisha}；可用 /waifu settings company 查看列表"
         )
     search_names = [str(name) for name in companies.COMPANIES[kaisha]["search"]]
-    company_ids = await vndb.resolve_company_ids(search_names)
+    company_ids = library.resolve_company_ids(search_names)
     waifu.save_group_company(group_id, [kaisha], company_ids)
     await matcher.finish(
         f"群 {group_id} 已设置会社后门：{companies.display_names([kaisha])}"
-        f"（解析到 {len(company_ids)} 个 VNDB 厂商，含旗下品牌）"
+        f"（本地库解析到 {len(company_ids)} 个厂商）"
     )
