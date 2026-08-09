@@ -276,6 +276,31 @@ async def test_waifu_draws_from_local_library_and_sends_card(
     assert "base64://" in str(matcher.sent[-1])
 
 
+async def test_legacy_waifu_record_renders_card_by_character_id(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path / "data"))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path / "data"))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    # 模拟更新前保存的旧记录：没有 library_path
+    waifu.save_waifu(123, _character("c1"), source="waifu")
+    assert waifu.get_today_waifu(123).get("library_path") is None
+
+    async def fake_render(character):
+        return b"JPEG-CARD"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), ""))
+
+    assert "已经抽过了" in str(matcher.sent[-1])
+    assert "base64://" in str(matcher.sent[-1])
+
+
 class _FakeAsync:
     def __init__(self, value) -> None:
         self._value = value

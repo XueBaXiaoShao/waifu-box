@@ -246,11 +246,18 @@ async def _cmd_waifu(
         existing = waifu.get_today_waifu(user_id)
         if existing:
             reply_image = existing.get("image_url")
-            if existing.get("source") != "yuzu" and existing.get("library_path"):
-                local = await asyncio.to_thread(
-                    library.get_character_by_path,
-                    str(existing["library_path"]),
-                )
+            if existing.get("source") != "yuzu":
+                if existing.get("library_path"):
+                    local = await asyncio.to_thread(
+                        library.get_character_by_path,
+                        str(existing["library_path"]),
+                    )
+                else:
+                    # 兼容更新前保存的旧记录：按 VNDB ID 回查本地资料库
+                    local = await asyncio.to_thread(
+                        library.get_character_by_id,
+                        str(existing.get("character_id") or ""),
+                    )
                 if local is not None:
                     reply_image = await _local_reply_image(
                         local, reply_image or ""
