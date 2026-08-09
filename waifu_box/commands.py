@@ -243,6 +243,12 @@ async def _cmd_waifu(
     command, _, arg = value.partition(" ")
     command = command.lower()
 
+    if command == "virus":
+        await matcher.finish(
+            "Special Thanks to 病毒@kitsurato. "
+            "病毒@kitsurato様のご協力誠にありがとうございます。"
+        )
+
     if command == "settings":
         await _handle_waifu_settings(matcher, event, arg.strip())
         return

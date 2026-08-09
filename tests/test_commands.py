@@ -197,6 +197,13 @@ async def test_failure_reports_message(monkeypatch) -> None:
     assert "抽卡失败" in str(matcher.sent[-1])
 
 
+async def test_waifu_virus_special_thanks() -> None:
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(1), "virus"))
+    assert "Special Thanks to 病毒@kitsurato" in str(matcher.sent[-1])
+    assert "ご協力誠にありがとうございます" in str(matcher.sent[-1])
+
+
 def _build_fake_library(root: Path) -> None:
     company_dir = root / "ゆずソフト"
     company_dir.mkdir(parents=True, exist_ok=True)
