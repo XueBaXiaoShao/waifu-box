@@ -22,4 +22,4 @@ dependencies = [
 packages = ["waifu_box"]
 
 [tool.setuptools.package-data]
-waifu_box = ["assets/fonts/*.otf"]
+waifu_box = ["assets/fonts/*.otf", "assets/fonts/*.ttf"]

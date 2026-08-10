@@ -20,7 +20,7 @@ RIGHT_WIDTH = CARD_WIDTH - RIGHT_LEFT - 24
 BOTTOM_RESERVE = 130
 
 _FONT_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
-_FONT_FILE = _FONT_DIR / "NotoSansSC-Regular.otf"
+_FONT_FILE = _FONT_DIR / "YWSongTi-Bold.ttf"
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
