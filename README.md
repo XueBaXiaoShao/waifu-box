@@ -15,6 +15,7 @@
 | `/waifu settings group=<群号> year=off|on` | 该群解除/恢复年代限制 |
 | `/waifu settings group=<群号> popular=off|on` | 该群解除/恢复热度限制 |
 | `/waifu reset [all|<QQ号>]` | 重置每日额度（仅管理员） |
+| `/waifu check <QQ号>` | 查看指定用户今天抽到的老婆（仅管理员） |
 | `/waifu set [<QQ号>] <角色名或cID>` | 管理员指定/代指定（绕过全部规则） |
 
 ## 机制

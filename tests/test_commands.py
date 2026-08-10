@@ -204,6 +204,92 @@ async def test_waifu_virus_special_thanks() -> None:
     assert "ご協力誠にありがとうございます" in str(matcher.sent[-1])
 
 
+def _make_admin(data_dir: Path, admin_id: int = 999) -> None:
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "admin_ids.json").write_text(
+        json.dumps({"admins": [admin_id]}),
+        encoding="utf-8",
+    )
+
+
+async def test_waifu_check_requires_admin() -> None:
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(1), "check 123"))
+    assert "只有管理员" in str(matcher.sent[-1])
+
+
+async def test_waifu_check_requires_qq(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    _make_admin(data_dir)
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "check"))
+    assert "用法：/waifu check <QQ号>" in str(matcher.sent[-1])
+
+
+async def test_waifu_check_target_not_drawn(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    _make_admin(data_dir)
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "check 123"))
+    assert "用户 123 今天还没有每日老婆" in str(matcher.sent[-1])
+
+
+async def test_waifu_check_shows_target_waifu(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    _make_admin(data_dir)
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(data_dir))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    waifu.save_waifu(123, _character("c1"), source="waifu")
+
+    async def fake_render(character):
+        return b"JPEG-CHECK"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "check 123"))
+
+    sent = str(matcher.sent[-1])
+    assert "base64://" in sent
+    assert "用户 123" in sent
+    assert "/waifu（管理员查看）" in sent
+    # 管理员查看不应改动目标用户的记录
+    assert waifu.get_today_waifu(123)["character_id"] == "c1"
+
+
+async def test_waifu_check_shows_yuzuwaifu_source(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    _make_admin(data_dir)
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(data_dir))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    waifu.save_waifu(123, _character("c1"), source="yuzu")
+
+    async def fake_render(character):
+        return b"JPEG-CHECK-YUZU"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "check 123"))
+
+    sent = str(matcher.sent[-1])
+    assert "base64://" in sent
+    assert "/yuzuwaifu（管理员查看）" in sent
+
+
 def _build_fake_library(root: Path) -> None:
     company_dir = root / "ゆずソフト"
     company_dir.mkdir(parents=True, exist_ok=True)

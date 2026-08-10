@@ -81,6 +81,7 @@ def _help_text() -> str:
 - /waifu settings group=<群号> year=off|on —— 该群解除/恢复年代限制
 - /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
 - /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
+- /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
 - /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）"""
 
 
@@ -198,6 +199,25 @@ async def _local_reply_image(
     return fallback_url
 
 
+async def _record_reply_image(record: dict) -> str:
+    """把已保存的老婆记录渲染成卡片图片；本地库找不到时回退原图 URL。"""
+    reply_image = str(record.get("image_url") or "")
+    if record.get("library_path"):
+        local = await asyncio.to_thread(
+            library.get_character_by_path,
+            str(record["library_path"]),
+        )
+    else:
+        # 兼容更新前保存的旧记录：按 VNDB ID 回查本地资料库
+        local = await asyncio.to_thread(
+            library.get_character_by_id,
+            str(record.get("character_id") or ""),
+        )
+    if local is not None:
+        reply_image = await _local_reply_image(local, reply_image)
+    return reply_image
+
+
 def _library_path(character: library.LibraryCharacter) -> str:
     root = Path(config.library_dir)
     try:
@@ -258,20 +278,7 @@ async def _cmd_waifu(
     if not value:
         existing = waifu.get_today_waifu(user_id)
         if existing:
-            reply_image = existing.get("image_url")
-            if existing.get("library_path"):
-                local = await asyncio.to_thread(
-                    library.get_character_by_path,
-                    str(existing["library_path"]),
-                )
-            else:
-                # 兼容更新前保存的旧记录：按 VNDB ID 回查本地资料库
-                local = await asyncio.to_thread(
-                    library.get_character_by_id,
-                    str(existing.get("character_id") or ""),
-                )
-            if local is not None:
-                reply_image = await _local_reply_image(local, reply_image or "")
+            reply_image = await _record_reply_image(existing)
             if existing.get("source") == "yuzu":
                 repeat_note = (
                     "你今天已经抽过 /yuzuwaifu 了，"
@@ -416,6 +423,29 @@ async def _cmd_waifu(
                 at_user_id=target_user_id if target_user_id != user_id else None,
             )
         )
+    elif command == "check":
+        if not is_admin:
+            await matcher.finish("只有管理员可以查看他人的每日老婆")
+        target = arg.strip()
+        if not target.isdigit():
+            await matcher.finish("用法：/waifu check <QQ号>")
+        target_user_id = int(target)
+        existing = waifu.get_today_waifu(target_user_id)
+        if existing is None:
+            await matcher.finish(f"用户 {target_user_id} 今天还没有每日老婆")
+        reply_image = await _record_reply_image(existing)
+        if existing.get("source") == "yuzu":
+            note = f"用户 {target_user_id} 今天抽的是 /yuzuwaifu（管理员查看）"
+        else:
+            note = f"用户 {target_user_id} 今天抽的是 /waifu（管理员查看）"
+        await matcher.finish(
+            _waifu_reply(
+                event,
+                reply_image,
+                _waifu_text(existing, note),
+                at_user_id=target_user_id if target_user_id != user_id else None,
+            )
+        )
     elif command == "reset":
         if not is_admin:
             await matcher.finish("只有管理员可以重置每日老婆")
@@ -433,7 +463,8 @@ async def _cmd_waifu(
         await matcher.finish("用法：/waifu reset [all|<QQ号>]")
     else:
         await matcher.finish(
-            "用法：/waifu [reroll|set <角色名>|settings|reset [all|<QQ号>]]"
+            "用法：/waifu [reroll|set <角色名>|check <QQ号>|"
+            "settings|reset [all|<QQ号>]]"
         )
 
 
