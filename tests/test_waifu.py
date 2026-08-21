@@ -31,6 +31,24 @@ def test_state_round_trip_and_reset(tmp_path, monkeypatch) -> None:
     assert waifu.get_today_waifu(123) is None
 
 
+def test_group_duplicate_tracking(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+
+    waifu.save_waifu(1, _character("c1"), source="waifu", group_id=912875556)
+    waifu.save_waifu(2, _character("c2"), source="yuzu", group_id=912875556)
+    waifu.save_waifu(3, _character("c3"), source="waifu", group_id=777777777)
+
+    assert waifu.get_today_waifu(1)["group_id"] == "912875556"
+    # 同群其他用户今天已抽的角色会被统计，且排除自己
+    assert waifu.taken_character_ids(912875556, exclude_user_id=1) == {"c2"}
+    assert waifu.taken_character_ids(912875556, exclude_user_id=2) == {"c1"}
+    # 不同群互不影响
+    assert waifu.taken_character_ids(777777777, exclude_user_id=1) == {"c3"}
+    # 无群记录（私聊/旧记录）不参与
+    waifu.save_waifu(4, _character("c4"), source="waifu")
+    assert waifu.taken_character_ids(912875556, exclude_user_id=1) == {"c2"}
+
+
 def test_settings_round_trip(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
 

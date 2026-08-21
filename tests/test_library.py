@@ -88,6 +88,17 @@ def test_random_character_filters(tmp_path, monkeypatch) -> None:
     assert library.random_character(year_from=2021) is None
 
 
+def test_random_character_excludes_ids(tmp_path, monkeypatch) -> None:
+    library_root = tmp_path / "final_company_library"
+    _build_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    # 排除唯一的女性角色 c1 后应无候选
+    assert library.random_character(company_ids=["p98"], exclude_ids={"c1"}) is None
+    assert library.random_character(company_ids=["p98"], exclude_ids={"c9"}) is not None
+
+
 def test_get_and_search_by_id(tmp_path, monkeypatch) -> None:
     library_root = tmp_path / "final_company_library"
     _build_library(library_root)

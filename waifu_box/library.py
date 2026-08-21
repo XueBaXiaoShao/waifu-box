@@ -269,8 +269,10 @@ def random_character(
     year_from: int = 0,
     year_to: int = 0,
     lru: bool = False,
+    exclude_ids: set[str] | None = None,
 ) -> LibraryCharacter | None:
-    """随机抽取一名有立绘的女性角色（资料库内）。"""
+    """随机抽取一名有立绘的女性角色（资料库内）；exclude_ids 中的角色会被排除。"""
+    exclude_ids = exclude_ids or set()
     candidates_games = games(
         company_ids=company_ids,
         year_from=year_from,
@@ -281,13 +283,14 @@ def random_character(
 
     weights = [max(1, len(game.character_ids)) for game in candidates_games]
     tried: set[str] = set()
-    attempts = min(8, len(candidates_games))
+    attempts = min(20, len(candidates_games))
     for _ in range(attempts):
         game = random.choices(candidates_games, weights=weights, k=1)[0]
         if game.id in tried:
             continue
         tried.add(game.id)
         candidates = _female_candidates(game)
+        candidates = [candidate for candidate in candidates if candidate.id not in exclude_ids]
         if not candidates:
             continue
         if lru:

@@ -230,6 +230,7 @@ def save_waifu(
     character: VNDBCharacter,
     source: str = "waifu",
     library_path: str | None = None,
+    group_id: int | None = None,
 ) -> dict[str, Any]:
     """保存（或覆盖）用户今天的每日老婆；source 区分普通 waifu / yuzuwaifu。"""
     record: dict[str, Any] = {
@@ -244,6 +245,7 @@ def save_waifu(
             {"id": vn.id, "title": vn.alttitle or vn.title or ""}
             for vn in (character.vns or [])[:5]
         ],
+        "group_id": str(group_id) if group_id is not None else None,
     }
     if library_path:
         record["library_path"] = library_path
@@ -252,6 +254,26 @@ def save_waifu(
         payload.setdefault("users", {})[str(user_id)] = record
         _write(payload)
     return record
+
+
+def taken_character_ids(group_id: int, exclude_user_id: int) -> set[str]:
+    """该群今天已被其他用户抽到的角色 ID（避免同群同日重复老婆，防牛头人）。"""
+    payload = _load()
+    today = _today()
+    result: set[str] = set()
+    for uid, record in payload.get("users", {}).items():
+        if str(exclude_user_id) == uid:
+            continue
+        if not isinstance(record, dict):
+            continue
+        if record.get("date") != today:
+            continue
+        if record.get("group_id") != str(group_id):
+            continue
+        cid = record.get("character_id")
+        if cid:
+            result.add(str(cid))
+    return result
 
 
 def reset_waifu(user_id: int | None) -> int:

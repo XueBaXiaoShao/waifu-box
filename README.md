@@ -28,6 +28,9 @@
 - 热度阈值暂不生效（`final_company_library` 无投票数字段）；
 - `/yuzuwaifu` 在本地库中固定抽柚子社，同样输出卡片、保持随机、不参与 LRU；
 - `/waifu` 与 `/yuzuwaifu` 共享每日额度，二者当天二选一；
+- **同群不重复**：每个群每天内，后抽的用户会自动避开本群今天已被其他人抽到
+  的角色（防牛头人）；不同群之间不受限制。抽取记录按群记录在
+  `data/waifu_state.json`（`group_id` 字段）；
 - 本地库不可用时回退 VNDB；回退查询结果仍按会社写入
   `data/waifu_cache.json`，当天有新鲜缓存时不请求 VNDB；
 - 每天 `WAIFU_CACHE_REFRESH_TIME`（默认 04:00）增量刷新回退用的 VNDB 缓存：

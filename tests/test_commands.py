@@ -343,6 +343,31 @@ def _build_fake_library(root: Path) -> None:
     )
 
 
+def _build_fake_library_two(root: Path) -> None:
+    """单作品双女角资料库，用于验证同群不重复抽卡。"""
+    _build_fake_library(root)
+    character_dir = root / "ゆずソフト" / "喫茶ステラと死神の蝶" / "角色"
+    (character_dir / "ヒロイン二号.json").write_text(
+        json.dumps(
+            {
+                "id": "c2",
+                "name": "ヒロイン二号",
+                "vndb_name": "Heroine2",
+                "display_name": "ヒロイン二号",
+                "cn_name": "女主角二号",
+                "sex": "female",
+                "role": "main",
+                "company_ids": ["p98"],
+                "image": {"url": "https://t.vndb.org/ch/2/2.jpg"},
+                "description": "Another heroine.",
+                "cn_description": "另一位主角。",
+                "cv": ["声优B"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 async def test_waifu_draws_from_local_library_and_sends_card(
     monkeypatch, tmp_path
 ) -> None:
@@ -450,6 +475,38 @@ async def test_legacy_waifu_record_renders_card_by_character_id(
 
     assert "已经抽过" in str(matcher.sent[-1])
     assert "base64://" in str(matcher.sent[-1])
+
+
+async def test_group_no_duplicate_waifu(monkeypatch, tmp_path) -> None:
+    """同群同日不能抽到别人已抽的老婆（防牛头人），不同群可重复。"""
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(data_dir))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library_two(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    async def fake_render(character):
+        return b"JPEG-CARD"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+
+    await _run(commands._cmd_waifu(matcher, _FakeGroupEvent(123, 912875556), ""))
+    first = waifu.get_today_waifu(123)["character_id"]
+    assert waifu.get_today_waifu(123)["group_id"] == "912875556"
+
+    await _run(commands._cmd_waifu(matcher, _FakeGroupEvent(456, 912875556), ""))
+    second = waifu.get_today_waifu(456)["character_id"]
+    assert waifu.get_today_waifu(456)["group_id"] == "912875556"
+    assert first != second
+
+    # 不同群可抽到相同角色
+    await _run(commands._cmd_waifu(matcher, _FakeGroupEvent(789, 777777777), ""))
+    third = waifu.get_today_waifu(789)["character_id"]
+    assert waifu.get_today_waifu(789)["group_id"] == "777777777"
+    assert third in {first, second}
 
 
 class _FakeAsync:

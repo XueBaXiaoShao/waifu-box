@@ -230,6 +230,7 @@ async def _draw_local_character(
     settings: dict,
     group_settings: dict,
     source: str = "waifu",
+    exclude_ids: set[str] | None = None,
 ) -> library.LibraryCharacter | None:
     """从 final_company_library 抽卡：优先群会社后门，其次全局会社池。"""
     year_from = 0 if group_settings["year_off"] else settings.get("year_from", 0)
@@ -249,6 +250,7 @@ async def _draw_local_character(
         year_from=year_from,
         year_to=year_to,
         lru=lru,
+        exclude_ids=exclude_ids,
     )
 
 
@@ -259,6 +261,7 @@ async def _cmd_waifu(
     source: str = "waifu",
 ) -> None:
     user_id = int(getattr(event, "user_id", 0))
+    group_id = getattr(event, "group_id", None)
     value = (value or "").strip()
     command, _, arg = value.partition(" ")
     command = command.lower()
@@ -298,19 +301,26 @@ async def _cmd_waifu(
             )
         settings = waifu.load_settings()
         group_settings = _event_group_settings(event)
+        exclude_ids = (
+            waifu.taken_character_ids(group_id, user_id)
+            if group_id is not None
+            else set()
+        )
         if not await asyncio.to_thread(library.ensure_index):
             character = await _draw_waifu_character(
-                settings, group_settings, source
+                settings, group_settings, source, exclude_ids
             )
             if character is None:
                 await matcher.finish("今天暂时抽不到老婆，请稍后再试")
-            record = waifu.save_waifu(user_id, character, source=source)
+            record = waifu.save_waifu(
+                user_id, character, source=source, group_id=group_id
+            )
             if source != "yuzu":
                 waifu_usage.mark_used(character.id)
             image_url = record.get("image_url")
         else:
             local = await _draw_local_character(
-                settings, group_settings, source
+                settings, group_settings, source, exclude_ids
             )
             if local is None:
                 await matcher.finish("今天暂时抽不到老婆，请稍后再试")
@@ -320,6 +330,7 @@ async def _cmd_waifu(
                 character,
                 source=source,
                 library_path=_library_path(local),
+                group_id=group_id,
             )
             if source != "yuzu":
                 waifu_usage.mark_used(character.id)
@@ -334,19 +345,26 @@ async def _cmd_waifu(
             await matcher.finish("只有管理员可以更换每日老婆")
         settings = waifu.load_settings()
         group_settings = _event_group_settings(event)
+        exclude_ids = (
+            waifu.taken_character_ids(group_id, user_id)
+            if group_id is not None
+            else set()
+        )
         if not await asyncio.to_thread(library.ensure_index):
             character = await _draw_waifu_character(
-                settings, group_settings, source
+                settings, group_settings, source, exclude_ids
             )
             if character is None:
                 await matcher.finish("更换失败，请稍后再试")
-            record = waifu.save_waifu(user_id, character, source=source)
+            record = waifu.save_waifu(
+                user_id, character, source=source, group_id=group_id
+            )
             if source != "yuzu":
                 waifu_usage.mark_used(character.id)
             image_url = record.get("image_url")
         else:
             local = await _draw_local_character(
-                settings, group_settings, source
+                settings, group_settings, source, exclude_ids
             )
             if local is None:
                 await matcher.finish("更换失败，请稍后再试")
@@ -356,6 +374,7 @@ async def _cmd_waifu(
                 character,
                 source=source,
                 library_path=_library_path(local),
+                group_id=group_id,
             )
             if source != "yuzu":
                 waifu_usage.mark_used(character.id)
@@ -403,12 +422,15 @@ async def _cmd_waifu(
                 _to_vndb_character(local),
                 source=source,
                 library_path=_library_path(local),
+                group_id=group_id,
             )
             image_url = await _local_reply_image(
                 local, record.get("image_url") or ""
             )
         else:
-            record = waifu.save_waifu(target_user_id, character)
+            record = waifu.save_waifu(
+                target_user_id, character, group_id=group_id
+            )
             image_url = record.get("image_url")
         note = (
             f"已为用户 {target_user_id} 设置老婆"
@@ -519,8 +541,26 @@ async def _draw_waifu_character(
     settings: dict,
     group_settings: dict,
     source: str,
-) -> VNDBCharacter:
-    """抽卡：新鲜缓存优先（普通 waifu 用 LRU），否则实时查询并回填缓存。"""
+    exclude_ids: set[str] | None = None,
+) -> VNDBCharacter | None:
+    """抽卡：新鲜缓存优先（普通 waifu 用 LRU），否则实时查询并回填缓存。
+    抽中 exclude_ids（同群其他用户今天已抽）中的角色时最多重试 6 次。"""
+    exclude_ids = exclude_ids or set()
+    for _ in range(6):
+        character = await _draw_waifu_character_once(settings, group_settings, source)
+        if character is None:
+            return None
+        if character.id not in exclude_ids:
+            return character
+    return None
+
+
+async def _draw_waifu_character_once(
+    settings: dict,
+    group_settings: dict,
+    source: str,
+) -> VNDBCharacter | None:
+    """单次抽卡：新鲜缓存优先（普通 waifu 用 LRU），否则实时查询并回填缓存。"""
     popular = (
         0 if group_settings["popular_off"] else settings.get("popular_threshold", 0)
     )
