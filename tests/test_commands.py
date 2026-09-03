@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from nonebot.adapters.onebot.v11 import Message
 
 from waifu_box import (
+    collection,
     commands,
     http,
     library,
@@ -71,6 +74,44 @@ def _character(char_id: str = "c1") -> VNDBCharacter:
 def test_slash_rules() -> None:
     assert commands._is_slash_waifu(_FakeEvent(1)) is True
     assert commands._is_slash_yuzuwaifu(_FakeEvent(1)) is False
+
+
+def test_resolve_trade_id_without_id(tmp_path, monkeypatch) -> None:
+    """accept/reject/cancel 不传交易号时自动选唯一的待处理交易。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection.config, "data_dir", str(tmp_path))
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c1", name="千咲", original="壬生千咲"),
+        source="yuzu",
+        role="primary",
+    )
+    waifu.save_waifu(
+        222,
+        VNDBCharacter(id="c2", name="丛雨", original="叢雨"),
+        source="yuzu",
+        role="side",
+    )
+    trade = collection.propose_trade(111, 222)
+    # 目标用户不传交易号 → 自动解析到唯一一笔
+    assert commands._resolve_trade_id("", 222, "incoming") == trade["id"]
+    # 发起人撤销同理
+    assert commands._resolve_trade_id("", 111, "outgoing") == trade["id"]
+    # 没待处理交易报错
+    with pytest.raises(ValueError):
+        commands._resolve_trade_id("", 333, "incoming")
+    # 多笔时要求附交易号
+    waifu.save_waifu(
+        333,
+        VNDBCharacter(id="c3", name="夕音", original="天霧夕音"),
+        source="yuzu",
+        role="main",
+    )
+    collection.propose_trade(333, 222)
+    with pytest.raises(ValueError):
+        commands._resolve_trade_id("", 222, "incoming")
+    # 显式交易号仍然可用
+    assert commands._resolve_trade_id(trade["id"], 222, "incoming") == trade["id"]
 
 
 def test_group_switch_disables(tmp_path, monkeypatch) -> None:
@@ -216,6 +257,48 @@ async def test_waifu_check_requires_admin() -> None:
     matcher = _FakeMatcher()
     await _run(commands._cmd_waifu(matcher, _FakeEvent(1), "check 123"))
     assert "只有管理员" in str(matcher.sent[-1])
+
+
+async def test_yuzuwaifu_set_keeps_yuzu_source(monkeypatch, tmp_path) -> None:
+    """/yuzuwaifu set 存下的记录 source 必须是 yuzu，否则无法交易。"""
+    data_dir = tmp_path / "data"
+    _make_admin(data_dir, admin_id=999)
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    async def fake_get_by_id(char_id: str):
+        return _character(char_id)
+
+    monkeypatch.setattr(commands.vndb, "get_by_id", fake_get_by_id)
+
+    matcher = _FakeMatcher()
+    # 本地库能搜到 → 走本地分支，source 为 yuzu
+    await _run(
+        commands._cmd_waifu(matcher, _FakeEvent(999), "set ヒロイン", source="yuzu")
+    )
+    record = waifu.get_today_waifu(999)
+    assert record is not None and record["source"] == "yuzu"
+    # VNDB 回退分支也必须存 yuzu
+    await _run(
+        commands._cmd_waifu(
+            matcher, _FakeEvent(999), "set c9876", source="yuzu"
+        )
+    )
+    record = waifu.get_today_waifu(999)
+    assert record is not None and record["source"] == "yuzu"
+    # 该记录可以被交易
+    monkeypatch.setattr(collection.config, "data_dir", str(data_dir))
+    waifu.save_waifu(
+        123,
+        VNDBCharacter(id="c2", name="丛雨", original="叢雨"),
+        source="yuzu",
+        role="side",
+    )
+    collection.propose_trade(999, 123)
 
 
 async def test_waifu_check_requires_qq(monkeypatch, tmp_path) -> None:
@@ -515,3 +598,73 @@ class _FakeAsync:
 
     async def __call__(self, *args, **kwargs):
         return self._value
+
+
+async def test_record_reply_image_fallback_card(monkeypatch, tmp_path) -> None:
+    """本地库缺失时也要渲染同款卡片，而不是回退成裸图。"""
+    monkeypatch.setattr(commands.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(library.config, "library_dir", str(tmp_path / "empty"))
+    library.reset_cache()
+    record = {
+        "date": "2026-09-04",
+        "source": "yuzu",
+        "character_id": "c9999",
+        "name": "隠 杏珠",
+        "original": "隠 杏珠",
+        "image_url": "https://t.vndb.org/ch/99/180599.jpg",
+        "vns": [{"id": "v56650", "title": "ライムライト・レモネードジャム"}],
+        "role": "",
+        "group_id": None,
+    }
+
+    async def fake_render(character):
+        assert character.image_url == record["image_url"]
+        assert character.name == "隠 杏珠"
+        assert character.game.title == "ライムライト・レモネードジャム"
+        return b"JPEG-CARD"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    reply = await commands._record_reply_image(record)
+    assert reply == "base64://SlBFRy1DQVJE"
+    # 渲染失败时仍回退到原图 URL
+    async def fail_render(character):
+        return None
+
+    monkeypatch.setattr(commands.card, "render_character_card", fail_render)
+    reply = await commands._record_reply_image(record)
+    assert reply == record["image_url"]
+
+
+def test_trade_pick_hint_lists_both_sides(tmp_path, monkeypatch) -> None:
+    """交易提示：列出双方今天的每日老婆（无卡号）。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection.config, "data_dir", str(tmp_path))
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(
+            id="c1",
+            name="千咲",
+            original="壬生千咲",
+            vns=[VnRef(id="v1", title="RIDDLE JOKER")],
+        ),
+        source="yuzu",
+        role="primary",
+    )
+    waifu.save_waifu(
+        222,
+        VNDBCharacter(
+            id="c2",
+            name="丛雨",
+            original="叢雨",
+            vns=[VnRef(id="v2", title="千恋＊万花")],
+        ),
+        source="yuzu",
+        role="side",
+    )
+    hint = commands._trade_pick_hint(111, 222)
+    assert "【你今天的每日老婆】" in hint
+    assert "壬生千咲" in hint
+    assert "SSR" in hint
+    assert "【用户 222 今天的每日老婆】" in hint
+    assert "叢雨" in hint
+    assert "互换请发：/yuzuwaifu trade @对方" in hint

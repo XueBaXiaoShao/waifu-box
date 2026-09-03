@@ -16,6 +16,7 @@ from nonebot.params import CommandArg
 
 from . import (
     card,
+    collection,
     companies,
     http,
     library,
@@ -82,7 +83,12 @@ def _help_text() -> str:
 - /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
 - /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
 - /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
-- /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）"""
+- /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）
+- /yuzuwaifu list [<QQ号>|@对方] —— 查看今天的每日老婆（含稀有度）
+- /yuzuwaifu trade @对方 —— 提议交换双方的今日柚子社每日老婆（其他会社暂不可交易）
+- /yuzuwaifu accept|reject —— 接受/拒绝交易（只有一笔时不用交易号）
+- /yuzuwaifu cancel —— 撤销自己发起的交易（只有一笔时不用交易号）
+- /yuzuwaifu rank —— 今日每日老婆稀有度排行榜"""
 
 
 @waifu_short.handle()
@@ -109,6 +115,19 @@ async def handle_yuzuwaifu_short(
     if not _plugin_enabled_for_event(event):
         await matcher.finish("该群已禁用每日老婆功能")
     value = (arg.extract_plain_text() or "").strip()
+    if value:
+        first, _, rest = value.partition(" ")
+        first = first.lower()
+        if first in (
+            "list",
+            "trade",
+            "rank",
+            "accept",
+            "reject",
+            "cancel",
+        ):
+            await _handle_yuzu_trade(matcher, event, first, rest.strip())
+            return
     try:
         await _cmd_waifu(matcher, event, value, source="yuzu")
     except (http.HttpError, RuntimeError) as exc:
@@ -200,7 +219,7 @@ async def _local_reply_image(
 
 
 async def _record_reply_image(record: dict) -> str:
-    """把已保存的老婆记录渲染成卡片图片；本地库找不到时回退原图 URL。"""
+    """把已保存的老婆记录渲染成卡片图片；本地库缺失时用同款样式兜底渲染。"""
     reply_image = str(record.get("image_url") or "")
     if record.get("library_path"):
         local = await asyncio.to_thread(
@@ -215,7 +234,52 @@ async def _record_reply_image(record: dict) -> str:
         )
     if local is not None:
         reply_image = await _local_reply_image(local, reply_image)
+    else:
+        company_ids = (
+            ["p98", "p12215"]
+            if str(record.get("source") or "") == "yuzu"
+            else []
+        )
+        image_bytes = await card.render_character_card(
+            _RecordCharacter(record, company_ids=company_ids)
+        )
+        if image_bytes:
+            reply_image = f"base64://{card.base64_image(image_bytes)}"
     return reply_image
+
+
+class _RecordCharacter:
+    """把已保存的每日老婆记录包装成卡片渲染对象（本地库缺失时的兜底）。
+
+    与本地资料库角色同款卡片样式：左立绘 + 右信息简介 + 右下会社 logo。
+    """
+
+    def __init__(
+        self, record: dict, company_ids: list[str] | None = None
+    ) -> None:
+        vns = record.get("vns") or []
+        game = vns[0] if vns and isinstance(vns[0], dict) else {}
+        self.name = str(
+            record.get("original") or record.get("name") or "未知角色"
+        )
+        self.cn_name = ""
+        self.cv: list[str] = []
+        self.company_ids = company_ids or []
+        self.data: dict = {"role": str(record.get("role") or "")}
+        self.game = _CardGame(title=str(game.get("title") or ""))
+        self.description = ""
+        self.cn_description = ""
+        self.image_url = str(record.get("image_url") or "")
+
+
+class _CardGame:
+    """卡片渲染所需的极简作品信息。"""
+
+    def __init__(self, title: str) -> None:
+        self.title = title
+        self.jp_title = title
+        self.cn_title = ""
+        self.year: int | None = None
 
 
 def _library_path(character: library.LibraryCharacter) -> str:
@@ -331,6 +395,7 @@ async def _cmd_waifu(
                 source=source,
                 library_path=_library_path(local),
                 group_id=group_id,
+                role=str(local.data.get("role") or ""),
             )
             if source != "yuzu":
                 waifu_usage.mark_used(character.id)
@@ -375,6 +440,7 @@ async def _cmd_waifu(
                 source=source,
                 library_path=_library_path(local),
                 group_id=group_id,
+                role=str(local.data.get("role") or ""),
             )
             if source != "yuzu":
                 waifu_usage.mark_used(character.id)
@@ -398,11 +464,10 @@ async def _cmd_waifu(
             target_user_id = int(first)
             keyword = rest.strip()
         local: library.LibraryCharacter | None = None
-        if source != "yuzu":
-            local_items = await asyncio.to_thread(
-                library.search_characters, keyword, 1
-            )
-            local = local_items[0] if local_items else None
+        local_items = await asyncio.to_thread(
+            library.search_characters, keyword, 1
+        )
+        local = local_items[0] if local_items else None
         if local is None:
             if re.match(r"^c\d+$", keyword, re.IGNORECASE):
                 try:
@@ -423,13 +488,17 @@ async def _cmd_waifu(
                 source=source,
                 library_path=_library_path(local),
                 group_id=group_id,
+                role=str(local.data.get("role") or ""),
             )
             image_url = await _local_reply_image(
                 local, record.get("image_url") or ""
             )
         else:
             record = waifu.save_waifu(
-                target_user_id, character, group_id=group_id
+                target_user_id,
+                character,
+                source=source,
+                group_id=group_id,
             )
             image_url = record.get("image_url")
         note = (
@@ -767,3 +836,175 @@ async def _handle_group_kaisha(
         f"群 {group_id} 已设置会社后门：{companies.display_names([kaisha])}"
         f"（本地库解析到 {len(company_ids)} 个厂商）"
     )
+
+
+def _at_user_ids(event: MessageEvent) -> list[int]:
+    """提取消息中的 @ 目标 QQ 号。"""
+    result: list[int] = []
+    message = getattr(event, "message", None)
+    if message is None:
+        return result
+    for segment in message:
+        data = getattr(segment, "data", None) or {}
+        if getattr(segment, "type", None) == "at" and str(data.get("qq") or "").isdigit():
+            result.append(int(data["qq"]))
+    return result
+
+
+def _trade_pick_hint(user_id: int, target_user_id: int) -> str:
+    """交易前提示：列出双方今天的每日老婆（每人只有一张，无需卡号）。"""
+    lines: list[str] = []
+    my_record = waifu.get_today_waifu(user_id)
+    their_record = waifu.get_today_waifu(target_user_id)
+    if my_record is not None:
+        lines.append("【你今天的每日老婆】")
+        lines.append(collection.waifu_display(my_record))
+        if str(my_record.get("source") or "") != "yuzu":
+            lines.append("（/waifu 抽的其他会社，暂时不能交易）")
+    else:
+        lines.append("你还没抽今天的每日老婆（/yuzuwaifu）")
+    if their_record is not None:
+        lines.append(f"【用户 {target_user_id} 今天的每日老婆】")
+        lines.append(collection.waifu_display(their_record))
+        if str(their_record.get("source") or "") != "yuzu":
+            lines.append("（/waifu 抽的其他会社，暂时不能交易）")
+    else:
+        lines.append(f"用户 {target_user_id} 今天还没抽每日老婆")
+    lines.append("互换请发：/yuzuwaifu trade @对方")
+    return "\n".join(lines)
+
+
+def _resolve_trade_id(value: str, user_id: int, direction: str) -> str:
+    """解析 accept/reject/cancel 的交易号；不传交易号时自动选唯一的待处理交易。"""
+    trade_id = value.strip().upper()
+    if trade_id:
+        return trade_id
+    pending = (
+        collection.pending_incoming(user_id)
+        if direction == "incoming"
+        else collection.pending_outgoing(user_id)
+    )
+    if not pending:
+        raise ValueError("你当前没有待处理的交易")
+    if len(pending) > 1:
+        lines = ["你有多笔待处理交易，请附交易号："]
+        for trade in pending:
+            peer = (
+                int(trade.get("proposer") or 0)
+                if direction == "incoming"
+                else int(trade.get("target") or 0)
+            )
+            lines.append(f"{trade['id']}（与 {peer}）")
+        raise ValueError("\n".join(lines))
+    return str(pending[0].get("id") or "")
+
+
+async def _handle_yuzu_trade(
+    matcher: Matcher,
+    event: MessageEvent,
+    action: str,
+    value: str,
+) -> None:
+    user_id = int(getattr(event, "user_id", 0))
+    at_ids = _at_user_ids(event)
+
+    if action == "list":
+        target = value.strip()
+        target_user_id = user_id
+        if target.isdigit():
+            target_user_id = int(target)
+        elif at_ids:
+            target_user_id = at_ids[0]
+        if target_user_id == user_id:
+            my_record = waifu.get_today_waifu(user_id)
+            if my_record is None:
+                await matcher.finish(
+                    "你还没抽今天的每日老婆，发 /yuzuwaifu 抽一张吧"
+                )
+            lines = [
+                "【你今天的每日老婆】",
+                collection.waifu_display(my_record),
+                "互换请发：/yuzuwaifu trade @对方",
+            ]
+            await matcher.finish("\n".join(lines))
+        await matcher.finish(_trade_pick_hint(user_id, target_user_id))
+
+    if action == "rank":
+        group_id = getattr(event, "group_id", None)
+        records = waifu.all_today_waifu(group_id=group_id)
+        if not records:
+            await matcher.finish("今天还没有人抽到每日老婆")
+        entries = collection.ranking(records)
+        lines = ["【今日每日老婆稀有度排行】"]
+        my_rank = "未上榜"
+        for index, (uid, stars, rarity) in enumerate(entries, start=1):
+            line = f"{index}. 用户 {uid}：{stars}★{rarity}"
+            lines.append(line)
+            if uid == user_id:
+                my_rank = str(index)
+        lines.append(f"你的排名：第 {my_rank} 名")
+        await matcher.finish("\n".join(lines))
+
+    if action == "trade":
+        if not at_ids:
+            await matcher.finish(
+                "用法：/yuzuwaifu trade @对方（交换双方今天的每日老婆）"
+            )
+        target_user_id = at_ids[0]
+        try:
+            trade = collection.propose_trade(user_id, target_user_id)
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        my_record = waifu.get_today_waifu(user_id)
+        their_record = waifu.get_today_waifu(target_user_id)
+        lines = [
+            f"交易提议 #{trade['id']}",
+            "你给出：",
+            collection.waifu_display(my_record),
+            "你想换取：",
+            collection.waifu_display(their_record),
+            f"请在 10 分钟内让 @{target_user_id} 确认：",
+            "/yuzuwaifu accept",
+            "拒绝：/yuzuwaifu reject（不用交易号）",
+        ]
+        await matcher.finish("\n".join(lines))
+
+    if action == "accept":
+        try:
+            trade_id = _resolve_trade_id(value, user_id, "incoming")
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        try:
+            give_record, take_record, trade = collection.accept_trade(
+                trade_id, user_id
+            )
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        await matcher.finish(
+            f"交易 #{trade_id} 完成！\n"
+            f"你获得了：{collection.waifu_display(give_record)}\n"
+            f"你给出的：{collection.waifu_display(take_record)}\n"
+            "发 /yuzuwaifu 或 /yuzuwaifu list 查看你现在的每日老婆"
+        )
+
+    if action == "reject":
+        try:
+            trade_id = _resolve_trade_id(value, user_id, "incoming")
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        try:
+            collection.reject_trade(trade_id, user_id)
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        await matcher.finish(f"已拒绝交易 #{trade_id}")
+
+    if action == "cancel":
+        try:
+            trade_id = _resolve_trade_id(value, user_id, "outgoing")
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        try:
+            collection.cancel_trade(trade_id, user_id)
+        except ValueError as exc:
+            await matcher.finish(str(exc))
+        await matcher.finish(f"已撤销交易 #{trade_id}")

@@ -231,6 +231,7 @@ def save_waifu(
     source: str = "waifu",
     library_path: str | None = None,
     group_id: int | None = None,
+    role: str = "",
 ) -> dict[str, Any]:
     """保存（或覆盖）用户今天的每日老婆；source 区分普通 waifu / yuzuwaifu。"""
     record: dict[str, Any] = {
@@ -246,6 +247,7 @@ def save_waifu(
             for vn in (character.vns or [])[:5]
         ],
         "group_id": str(group_id) if group_id is not None else None,
+        "role": role,
     }
     if library_path:
         record["library_path"] = library_path
@@ -254,6 +256,29 @@ def save_waifu(
         payload.setdefault("users", {})[str(user_id)] = record
         _write(payload)
     return record
+
+
+def swap_today_waifu(
+    user_a: int, user_b: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """原子互换两位用户今天的每日老婆。
+
+    必须双方都已有今天的记录，否则抛 ValueError。返回 (交换后 A 的记录,
+    交换后 B 的记录)。与读取/写入共用同一把锁，保证展示数据永远一致。
+    """
+    with _lock:
+        payload = _load()
+        users = payload.setdefault("users", {})
+        record_a = users.get(str(user_a))
+        record_b = users.get(str(user_b))
+        if not isinstance(record_a, dict) or not isinstance(record_b, dict):
+            raise ValueError("有一方今天还没抽每日老婆，交易失效")
+        if record_a.get("date") != _today() or record_b.get("date") != _today():
+            raise ValueError("有一方今天的每日老婆已过期，交易失效")
+        users[str(user_a)] = record_b
+        users[str(user_b)] = record_a
+        _write(payload)
+        return record_b, record_a
 
 
 def taken_character_ids(group_id: int, exclude_user_id: int) -> set[str]:
@@ -273,6 +298,26 @@ def taken_character_ids(group_id: int, exclude_user_id: int) -> set[str]:
         cid = record.get("character_id")
         if cid:
             result.add(str(cid))
+    return result
+
+
+def all_today_waifu(group_id: int | None = None) -> list[tuple[int, dict[str, Any]]]:
+    """全部用户今天的每日老婆；可选按抽卡群过滤。"""
+    payload = _load()
+    users = payload.get("users", {})
+    today = _today()
+    result: list[tuple[int, dict[str, Any]]] = []
+    if not isinstance(users, dict):
+        return result
+    for uid, record in users.items():
+        if not isinstance(record, dict) or record.get("date") != today:
+            continue
+        if (
+            group_id is not None
+            and record.get("group_id") != str(group_id)
+        ):
+            continue
+        result.append((int(uid), record))
     return result
 
 

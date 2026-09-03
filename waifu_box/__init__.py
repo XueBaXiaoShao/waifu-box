@@ -2,7 +2,8 @@
 
 /waifu 与 /yuzuwaifu 都基于本地 final_company_library 抽卡并生成角色信息
 卡片（/yuzuwaifu 固定柚子社），两者共享每日额度；支持 LRU 轮换、群级后门
-与会社池。
+与会社池；每日老婆支持用户间互换（交易只作用于今天的每日老婆，展示与
+交易读取同一数据源 waifu_state.json）。
 """
 
 from nonebot.plugin import PluginMetadata
@@ -14,11 +15,13 @@ __plugin_meta__ = PluginMetadata(
     name="每日老婆（waifu-box）",
     description=(
         "本地 final_company_library 角色卡 /waifu 与 /yuzuwaifu（柚子社），"
-        "共享每日额度、LRU 轮换、群级后门与会社池"
+        "共享每日额度、LRU 轮换、群级后门与会社池；每日老婆支持互换交易"
     ),
     usage=(
         "/waifu、/yuzuwaifu、/waifu settings、/waifu reset、"
-        "/waifu settings group=<群号> kaisha=<会社key|off>"
+        "/waifu settings group=<群号> kaisha=<会社key|off>、"
+        "/yuzuwaifu list、/yuzuwaifu trade @对方、"
+        "/yuzuwaifu accept|reject <交易号>、/yuzuwaifu rank"
     ),
     type="application",
     homepage="",
