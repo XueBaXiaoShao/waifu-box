@@ -85,7 +85,7 @@ def _help_text() -> str:
 - /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
 - /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）
 - /yuzuwaifu list [<QQ号>|@对方] —— 查看今天的每日老婆（含稀有度）
-- /yuzuwaifu trade @对方 —— 提议交换双方的今日柚子社每日老婆（其他会社暂不可交易）
+- /yuzuwaifu trade @对方 —— 提议交换双方的今日柚子社每日老婆（按会社判断，/waifu 抽到柚子社角色也可交易）
 - /yuzuwaifu accept|reject —— 接受/拒绝交易（只有一笔时不用交易号）
 - /yuzuwaifu cancel —— 撤销自己发起的交易（只有一笔时不用交易号）
 - /yuzuwaifu rank —— 今日每日老婆稀有度排行榜"""

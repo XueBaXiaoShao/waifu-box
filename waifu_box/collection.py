@@ -2,6 +2,8 @@
 
 只允许交换每天抽到的每日老婆（/waifu 或 /yuzuwaifu 的记录），
 每人每天只有一条记录，展示与交易都读同一数据源，不存在卡号错位问题。
+交易资格按角色会社判断（柚子社 p98 / 柚子社SOUR p12215），
+与抽卡命令无关：/waifu 抽到柚子社角色同样可以交易。
 角色按其在作品中的定位（role）定稀有度，仅用于展示与排行榜。
 """
 
@@ -19,6 +21,9 @@ from . import waifu
 from .config import config
 
 _lock = threading.RLock()
+
+# 柚子社（含柚子社SOUR）会社 ID：/yuzuwaifu 固定抽这两个会社
+YUZU_COMPANY_IDS = ("p98", "p12215")
 
 # 角色定位 → (稀有度名, 星级)
 ROLE_RARITY: dict[str, tuple[str, int]] = {
@@ -93,15 +98,31 @@ def waifu_display(record: dict[str, Any]) -> str:
     return line
 
 
+def is_yuzu_record(record: dict[str, Any]) -> bool:
+    """每日老婆记录是否属于柚子社（按角色会社判断，与抽卡命令无关）。
+
+    优先回查本地资料库角色 JSON 的 company_ids；无本地路径时（VNDB 兜底
+    抽卡）回退：/yuzuwaifu 抽的一律视为柚子社（兜底路径按 p98/p12215 过滤）。
+    """
+    library_path = record.get("library_path")
+    if library_path:
+        try:
+            path = Path(config.library_dir) / str(library_path)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            company_ids = {str(item) for item in data.get("company_ids") or []}
+            return bool(company_ids & set(YUZU_COMPANY_IDS))
+        except (OSError, json.JSONDecodeError):
+            return False
+    return str(record.get("source") or "") == "yuzu"
+
+
 def require_yuzu_waifu(user_id: int) -> dict[str, Any]:
     """返回用户今天的柚子社每日老婆；未抽或不是柚子社抛 ValueError。"""
     record = waifu.get_today_waifu(user_id)
     if record is None:
         raise ValueError("你还没有抽今天的每日老婆，先抽一张 /yuzuwaifu 吧")
-    if str(record.get("source") or "") != "yuzu":
-        raise ValueError(
-            "你今天的每日老婆是 /waifu 抽的其他会社角色，暂时不能交易"
-        )
+    if not is_yuzu_record(record):
+        raise ValueError("你今天的每日老婆不是柚子社角色，暂时不能交易")
     return record
 
 
@@ -197,9 +218,8 @@ def accept_trade(
             target_record = waifu.get_today_waifu(user_id)
             if proposer_record is None or target_record is None:
                 raise ValueError("有一方今天还没抽每日老婆，交易失效")
-            if (
-                str(proposer_record.get("source") or "") != "yuzu"
-                or str(target_record.get("source") or "") != "yuzu"
+            if not is_yuzu_record(proposer_record) or not is_yuzu_record(
+                target_record
             ):
                 raise ValueError("交易对象不是柚子社每日老婆，交易失效")
             waifu.swap_today_waifu(proposer_id, user_id)

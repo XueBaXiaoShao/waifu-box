@@ -129,7 +129,7 @@ def test_trade_requires_today_waifu(tmp_path, monkeypatch) -> None:
 
 
 def test_trade_yuzu_only(tmp_path, monkeypatch) -> None:
-    """其他会社（/waifu 抽的）暂时不能交易。"""
+    """非柚子社角色（无本地库、/waifu 抽的）暂时不能交易。"""
     _set_today(tmp_path, monkeypatch, 111, "c1", "primary")
     waifu.save_waifu(
         222,
@@ -137,7 +137,7 @@ def test_trade_yuzu_only(tmp_path, monkeypatch) -> None:
         source="waifu",
         role="main",
     )
-    # 对方是 /waifu 抽的其他会社 → 不能交易
+    # 对方是 /waifu 抽的未知会社角色 → 不能交易
     with pytest.raises(ValueError):
         collection.propose_trade(111, 222)
     with pytest.raises(ValueError):
@@ -152,6 +152,53 @@ def test_trade_yuzu_only(tmp_path, monkeypatch) -> None:
     )
     with pytest.raises(ValueError):
         collection.accept_trade(trade_id, 222)
+
+
+def test_trade_yuzu_by_company(tmp_path, monkeypatch) -> None:
+    """/waifu 抽到柚子社角色（按 library_path 会社判断）同样可以交易。"""
+    library_dir = tmp_path / "library"
+    char_file = (
+        library_dir
+        / "ゆずソフト"
+        / "ライムライト・レモネードジャム"
+        / "角色"
+        / "礫川 美玖.json"
+    )
+    char_file.parent.mkdir(parents=True)
+    char_file.write_text(json.dumps({"company_ids": ["p98"]}), encoding="utf-8")
+    monkeypatch.setattr(collection.config, "library_dir", str(library_dir))
+
+    _set_today(tmp_path, monkeypatch, 111, "c1", "primary")
+    waifu.save_waifu(
+        222,
+        VNDBCharacter(id="c2", name="Hero-222", original="ヒーロー-222"),
+        source="waifu",
+        role="primary",
+        library_path="ゆずソフト/ライムライト・レモネードジャム/角色/礫川 美玖.json",
+    )
+    assert collection.is_yuzu_record(waifu.get_today_waifu(222))
+    trade_id = collection.propose_trade(111, 222)["id"]
+    give, take, _ = collection.accept_trade(trade_id, 222)
+    assert give["character_id"] == "c1"
+    assert take["character_id"] == "c2"
+
+    # 非柚子社的本地库角色仍不可交易
+    other_file = (
+        library_dir / "ほかほか" / "その他" / "角色" / "誰か.json"
+    )
+    other_file.parent.mkdir(parents=True)
+    other_file.write_text(
+        json.dumps({"company_ids": ["p999"]}), encoding="utf-8"
+    )
+    waifu.save_waifu(
+        333,
+        VNDBCharacter(id="c3", name="Hero-333", original="ヒーロー-333"),
+        source="waifu",
+        role="main",
+        library_path="ほかほか/その他/角色/誰か.json",
+    )
+    with pytest.raises(ValueError):
+        collection.propose_trade(111, 333)
 
 
 def test_trade_reject_and_expire(tmp_path, monkeypatch) -> None:
