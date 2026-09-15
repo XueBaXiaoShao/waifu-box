@@ -30,7 +30,15 @@ from .config import config
 from .models import Image, VNDBCharacter, VnRef
 
 # /waifu test 测试抽卡的限定作品（新收录作品的 VNDB ID）
-TEST_GAME_IDS = ["v62721", "v50215"]
+TEST_GAME_IDS = [
+    "v62721", "v50215",
+    "v63385", "v57252", "v57740", "v58009", "v56400", "v60562",
+    "v56862", "v60096", "v60213", "v62700", "v63472", "v59534",
+    "v59419", "v60196", "v60395", "v60646", "v59520", "v56147",
+    "v60663", "v62286", "v56343", "v61834", "v57718", "v52407",
+    "v61216", "v61093", "v63384", "v52780", "v59519", "v61200",
+    "v66374", "v58614", "v63082",
+]
 
 
 def _is_slash_waifu(event: MessageEvent) -> bool:
