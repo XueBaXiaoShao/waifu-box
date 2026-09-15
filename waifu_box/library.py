@@ -266,18 +266,27 @@ def _pick_lru(candidates: list[LibraryCharacter]) -> LibraryCharacter:
 def random_character(
     *,
     company_ids: list[str] | None = None,
+    game_ids: list[str] | None = None,
     year_from: int = 0,
     year_to: int = 0,
     lru: bool = False,
     exclude_ids: set[str] | None = None,
 ) -> LibraryCharacter | None:
-    """随机抽取一名有立绘的女性角色（资料库内）；exclude_ids 中的角色会被排除。"""
+    """随机抽取一名有立绘的女性角色（资料库内）；exclude_ids 中的角色会被排除。
+
+    game_ids 非空时只在指定作品内抽取（如 /waifu test 限定新收录作品）。
+    """
     exclude_ids = exclude_ids or set()
     candidates_games = games(
         company_ids=company_ids,
         year_from=year_from,
         year_to=year_to,
     )
+    if game_ids:
+        wanted = {str(item) for item in game_ids}
+        candidates_games = [
+            game for game in candidates_games if game.id in wanted
+        ]
     if not candidates_games:
         return None
 

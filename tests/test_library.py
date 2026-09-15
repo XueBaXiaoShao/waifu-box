@@ -99,6 +99,22 @@ def test_random_character_excludes_ids(tmp_path, monkeypatch) -> None:
     assert library.random_character(company_ids=["p98"], exclude_ids={"c9"}) is not None
 
 
+def test_random_character_game_ids(tmp_path, monkeypatch) -> None:
+    """game_ids 限定后只在指定作品内抽取（/waifu test 用）。"""
+    library_root = tmp_path / "final_company_library"
+    _build_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    picked = library.random_character(game_ids=["v1"])
+    assert picked is not None
+    assert picked.id == "c1"
+    assert picked.game.id == "v1"
+
+    assert library.random_character(game_ids=["v999"]) is None
+    assert library.random_character(game_ids=["v1", "v999"]) is not None
+
+
 def test_get_and_search_by_id(tmp_path, monkeypatch) -> None:
     library_root = tmp_path / "final_company_library"
     _build_library(library_root)

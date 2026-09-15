@@ -29,6 +29,9 @@ from . import (
 from .config import config
 from .models import Image, VNDBCharacter, VnRef
 
+# /waifu test 测试抽卡的限定作品（新收录作品的 VNDB ID）
+TEST_GAME_IDS = ["v62721"]
+
 
 def _is_slash_waifu(event: MessageEvent) -> bool:
     """/waifu 入口只认带斜杠的命令。"""
@@ -83,6 +86,7 @@ def _help_text() -> str:
 - /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
 - /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
 - /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
+- /waifu test —— 测试抽卡（仅管理员；只从新收录作品的角色中抽取，不占用每日额度）
 - /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）
 - /yuzuwaifu list [<QQ号>|@对方] —— 查看今天的每日老婆（含稀有度）
 - /yuzuwaifu trade @对方 —— 提议交换双方的今日柚子社每日老婆（按会社判断，/waifu 抽到柚子社角色也可交易）
@@ -334,6 +338,22 @@ async def _cmd_waifu(
         await matcher.finish(
             "Special Thanks to 病毒@kitsurato. "
             "病毒@kitsurato様のご協力誠にありがとうございます。"
+        )
+
+    if command == "test":
+        if not permissions.is_admin(user_id):
+            await matcher.finish("只有管理员可以测试抽卡")
+        local = await asyncio.to_thread(
+            library.random_character,
+            game_ids=TEST_GAME_IDS,
+        )
+        if local is None:
+            await matcher.finish("测试角色不存在，请检查资料库")
+        image_url = await _local_reply_image(
+            local, local.image_url or ""
+        )
+        await matcher.finish(
+            _waifu_reply(event, image_url, "【测试抽卡】新收录作品限定")
         )
 
     if command == "settings":
