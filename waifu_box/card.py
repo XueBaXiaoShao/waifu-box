@@ -221,7 +221,8 @@ def render_card(
         radius=18,
         fill="#ece7e3",
     )
-    _paste_cover(canvas, image_bytes, (30, 30, 428, CARD_HEIGHT - 30))
+    # 左侧立绘固定为竖版盒（与立绘比例接近，避免超高面板把立绘缩太小）
+    _paste_cover(canvas, image_bytes, (30, 30, 428, 570))
 
     # 右侧分隔
     draw.line(
