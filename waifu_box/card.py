@@ -13,7 +13,7 @@ from . import logos
 from .http import request
 
 CARD_WIDTH = 1100
-CARD_HEIGHT = 1080
+CARD_HEIGHT = 860
 LEFT_RIGHT_GAP = 455
 RIGHT_LEFT = 470
 RIGHT_WIDTH = CARD_WIDTH - RIGHT_LEFT - 24
@@ -154,7 +154,7 @@ def _paste_cover(
     area: tuple[int, int, int, int],
     radius: int = 28,
 ) -> None:
-    """把角色立绘完整缩放到左侧区域（contain，不裁切），居中并应用圆角遮罩。"""
+    """把角色立绘放大铺满左侧区域，居中裁切并应用圆角遮罩。"""
     left, top, right, bottom = area
     target_w = right - left
     target_h = bottom - top
@@ -162,22 +162,30 @@ def _paste_cover(
         portrait = Image.open(BytesIO(image_bytes)).convert("RGBA")
     except Exception:
         return
-    scale = min(target_w / portrait.width, target_h / portrait.height)
+    scale = max(target_w / portrait.width, target_h / portrait.height)
     new_size = (
         max(1, int(portrait.width * scale)),
         max(1, int(portrait.height * scale)),
     )
     portrait = portrait.resize(new_size, Image.LANCZOS)
-    paste_x = left + (target_w - new_size[0]) // 2
-    paste_y = top + (target_h - new_size[1]) // 2
+    crop_x = (new_size[0] - target_w) // 2
+    crop_y = (new_size[1] - target_h) // 2
+    portrait = portrait.crop(
+        (
+            crop_x,
+            crop_y,
+            crop_x + target_w,
+            crop_y + target_h,
+        )
+    )
 
-    mask = Image.new("L", new_size, 0)
+    mask = Image.new("L", (target_w, target_h), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, new_size[0] - 1, new_size[1] - 1),
+        (0, 0, target_w - 1, target_h - 1),
         radius=radius,
         fill=255,
     )
-    canvas.paste(portrait, (paste_x, paste_y), mask)
+    canvas.paste(portrait, (left, top), mask)
 
 
 def _paste_logo(canvas: Image.Image, company_ids: list[str] | None) -> None:
@@ -221,8 +229,7 @@ def render_card(
         radius=18,
         fill="#ece7e3",
     )
-    # 左侧立绘固定为竖版盒（与立绘比例接近，避免超高面板把立绘缩太小）
-    _paste_cover(canvas, image_bytes, (30, 30, 428, 570))
+    _paste_cover(canvas, image_bytes, (30, 30, 428, CARD_HEIGHT - 30))
 
     # 右侧分隔
     draw.line(
