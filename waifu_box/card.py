@@ -13,7 +13,7 @@ from . import logos
 from .http import request
 
 CARD_WIDTH = 1100
-CARD_HEIGHT = 820
+CARD_HEIGHT = 1000
 LEFT_RIGHT_GAP = 455
 RIGHT_LEFT = 470
 RIGHT_WIDTH = CARD_WIDTH - RIGHT_LEFT - 24
@@ -82,6 +82,34 @@ def _draw_text_block(
             break
         draw.text((x, y), line, font=font, fill=fill)
         y += font.size + line_spacing
+
+
+def _fit_intro_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+    max_height: int,
+    line_spacing: int = 6,
+) -> str:
+    """按可用高度裁剪简介：预留 1 行给省略号，超出部分截断。"""
+    lines = _wrap_text(draw, text, font, max_width)
+    capacity = max(1, max_height // (font.size + line_spacing))
+    if len(lines) <= capacity:
+        return text
+    # 逐行重排，保证最后一行以省略号收尾且不超宽
+    used = 0
+    result = []
+    for line in lines:
+        if used >= capacity - 1:
+            break
+        result.append(line)
+        used += 1
+    last = lines[min(used, len(lines) - 1)]
+    while last and draw.textlength(last + "……", font=font) > max_width:
+        last = last[:-1]
+    result.append(last + "……")
+    return "\n".join(result)
 
 
 def _draw_info_line(
@@ -278,11 +306,20 @@ def render_card(
             intro = "角色特征：" + "、".join(tag_names[:10]) + "。"
     if not intro:
         intro = "暂无简介"
-    if len(intro) > 700:
-        intro = intro[:700].rsplit(" ", 1)[0] + "……"
+    # 简介字号自适应：越长字号越小，尽量多显示
+    if len(intro) > 900:
+        intro_font = _font(18)
+    elif len(intro) > 500:
+        intro_font = _font(20)
+    else:
+        intro_font = _font(22)
     draw.text((x, y), "简介", font=_font(24), fill=accent)
     y += 36
-    intro_font = _font(22)
+    # 按可用行数裁剪（带省略号），超出部分不硬截断在 700 字
+    block_max_y = CARD_HEIGHT - BOTTOM_RESERVE - 10
+    intro = _fit_intro_text(
+        draw, intro, intro_font, RIGHT_WIDTH, block_max_y - y, line_spacing=7
+    )
     _draw_text_block(
         draw,
         (x, y),
@@ -290,7 +327,7 @@ def render_card(
         intro_font,
         text_color,
         RIGHT_WIDTH,
-        CARD_HEIGHT - BOTTOM_RESERVE - 10,
+        block_max_y,
         line_spacing=7,
     )
 
