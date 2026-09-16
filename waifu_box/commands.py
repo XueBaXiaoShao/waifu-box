@@ -361,7 +361,11 @@ async def _cmd_waifu(
             local, local.image_url or ""
         )
         await matcher.finish(
-            _waifu_reply(event, image_url, "【测试抽卡】新收录作品限定")
+            _waifu_reply(
+                event,
+                image_url,
+                "【测试抽卡】新收录作品限定（仅测试，不占用今日每日老婆额度）",
+            )
         )
 
     if command == "settings":
