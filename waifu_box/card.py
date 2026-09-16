@@ -13,7 +13,7 @@ from . import logos
 from .http import request
 
 CARD_WIDTH = 1100
-CARD_HEIGHT = 1000
+CARD_HEIGHT = 1080
 LEFT_RIGHT_GAP = 455
 RIGHT_LEFT = 470
 RIGHT_WIDTH = CARD_WIDTH - RIGHT_LEFT - 24
@@ -307,9 +307,11 @@ def render_card(
     if not intro:
         intro = "暂无简介"
     # 简介字号自适应：越长字号越小，尽量多显示
-    if len(intro) > 900:
+    if len(intro) > 1200:
+        intro_font = _font(16)
+    elif len(intro) > 700:
         intro_font = _font(18)
-    elif len(intro) > 500:
+    elif len(intro) > 400:
         intro_font = _font(20)
     else:
         intro_font = _font(22)
