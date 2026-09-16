@@ -76,3 +76,36 @@ def mark_test_used(user_id: int) -> None:
         day = datetime.now().strftime("%Y-%m-%d")
         payload.setdefault(day, {})[str(user_id)] = datetime.now().isoformat()
         _save_path(payload, _test_usage_file())
+
+
+def _test_state_file() -> Path:
+    return Path(config.data_dir) / "waifu_test_state.json"
+
+
+def get_test_waifu(user_id: int) -> dict | None:
+    """/waifu test 今日已抽的角色记录；没有或已过期返回 None。"""
+    payload = _load_path(_test_state_file())
+    record = payload.get(str(user_id))
+    if record and record.get("date") == datetime.now().strftime("%Y-%m-%d"):
+        return record
+    return None
+
+
+def save_test_waifu(user_id: int, record: dict) -> None:
+    """保存 /waifu test 今日抽到的角色记录（用于再次输入时重看）。"""
+    with _lock:
+        payload = _load_path(_test_state_file())
+        payload[str(user_id)] = record
+        _save_path(payload, _test_state_file())
+
+
+def reset_test_waifu(user_id: int) -> None:
+    """重置 /waifu test 今日记录与次数（管理员用）。"""
+    with _lock:
+        payload = _load_path(_test_state_file())
+        payload.pop(str(user_id), None)
+        _save_path(payload, _test_state_file())
+        usage = _load_path(_test_usage_file())
+        day = datetime.now().strftime("%Y-%m-%d")
+        usage.setdefault(day, {}).pop(str(user_id), None)
+        _save_path(usage, _test_usage_file())

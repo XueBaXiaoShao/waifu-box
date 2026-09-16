@@ -349,8 +349,24 @@ async def _cmd_waifu(
         )
 
     if command == "test":
-        if waifu_usage.test_used_today(user_id):
-            await matcher.finish("你今天已经用过 /waifu test 了，每人每天限 1 次，明天再来吧")
+        test_arg = arg.strip()
+        if test_arg == "reset":
+            if not permissions.is_admin(user_id):
+                await matcher.finish("只有管理员可以重置测试")
+            if not waifu_usage.test_used_today(user_id):
+                await matcher.finish("你今天还没用过 /waifu test，无需重置")
+            waifu_usage.reset_test_waifu(user_id)
+            await matcher.finish("已重置今天的 /waifu test，可以重新测试了")
+        existing_test = waifu_usage.get_test_waifu(user_id)
+        if existing_test:
+            reply_image = await _record_reply_image(existing_test)
+            await matcher.finish(
+                _waifu_reply(
+                    event,
+                    reply_image,
+                    "你今天已经用过 /waifu test，这是你的测试结果（仅测试，不占用今日额度）",
+                )
+            )
         waifu_usage.mark_test_used(user_id)
         local = await asyncio.to_thread(
             library.random_character,
@@ -358,6 +374,17 @@ async def _cmd_waifu(
         )
         if local is None:
             await matcher.finish("测试角色不存在，请检查资料库")
+        waifu_usage.save_test_waifu(
+            user_id,
+            {
+                "date": waifu._today(),
+                "character_id": local.id,
+                "name": local.name,
+                "original": local.original,
+                "image_url": local.image_url or "",
+                "library_path": _library_path(local),
+            },
+        )
         image_url = await _local_reply_image(
             local, local.image_url or ""
         )

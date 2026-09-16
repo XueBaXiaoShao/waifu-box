@@ -682,3 +682,21 @@ def test_waifu_test_daily_limit(tmp_path, monkeypatch) -> None:
     # 记录持久化在 waifu_test_usage.json
     payload = json.loads((tmp_path / "waifu_test_usage.json").read_text("utf-8"))
     assert str(111) in list(payload.values())[0]
+
+
+def test_waifu_test_save_and_reset(tmp_path, monkeypatch) -> None:
+    """test 记录可保存重看，reset 清除今日记录与次数。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path))
+    assert waifu_usage.get_test_waifu(111) is None
+    waifu_usage.save_test_waifu(
+        111, {"date": waifu._today(), "character_id": "c1", "name": "测试"}
+    )
+    record = waifu_usage.get_test_waifu(111)
+    assert record and record["name"] == "测试"
+    assert waifu_usage.test_used_today(111) is False  # 保存记录不等于已用
+    waifu_usage.mark_test_used(111)
+    assert waifu_usage.test_used_today(111) is True
+    waifu_usage.reset_test_waifu(111)
+    assert waifu_usage.get_test_waifu(111) is None
+    assert waifu_usage.test_used_today(111) is False
