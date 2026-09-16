@@ -94,7 +94,7 @@ def _help_text() -> str:
 - /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
 - /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
 - /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
-- /waifu test —— 测试抽卡（仅管理员；只从新收录作品的角色中抽取，不占用每日额度）
+- /waifu test —— 测试抽卡（每人每天限 1 次；只从新收录作品的角色中抽取，不占用每日额度）
 - /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）
 - /yuzuwaifu list [<QQ号>|@对方] —— 查看今天的每日老婆（含稀有度）
 - /yuzuwaifu trade @对方 —— 提议交换双方的今日柚子社每日老婆（按会社判断，/waifu 抽到柚子社角色也可交易）
@@ -349,8 +349,9 @@ async def _cmd_waifu(
         )
 
     if command == "test":
-        if not permissions.is_admin(user_id):
-            await matcher.finish("只有管理员可以测试抽卡")
+        if waifu_usage.test_used_today(user_id):
+            await matcher.finish("你今天已经用过 /waifu test 了，每人每天限 1 次，明天再来吧")
+        waifu_usage.mark_test_used(user_id)
         local = await asyncio.to_thread(
             library.random_character,
             game_ids=TEST_GAME_IDS,

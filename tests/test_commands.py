@@ -668,3 +668,17 @@ def test_trade_pick_hint_lists_both_sides(tmp_path, monkeypatch) -> None:
     assert "【用户 222 今天的每日老婆】" in hint
     assert "叢雨" in hint
     assert "互换请发：/yuzuwaifu trade @对方" in hint
+
+
+def test_waifu_test_daily_limit(tmp_path, monkeypatch) -> None:
+    """每个人每天只能用一次 /waifu test。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path))
+    assert waifu_usage.test_used_today(111) is False
+    waifu_usage.mark_test_used(111)
+    assert waifu_usage.test_used_today(111) is True
+    # 其他人不受影响
+    assert waifu_usage.test_used_today(222) is False
+    # 记录持久化在 waifu_test_usage.json
+    payload = json.loads((tmp_path / "waifu_test_usage.json").read_text("utf-8"))
+    assert str(111) in list(payload.values())[0]
