@@ -29,8 +29,8 @@ from . import (
 from .config import config
 from .models import Image, VNDBCharacter, VnRef
 
-# /waifu test 测试抽卡的限定作品（新收录作品的 VNDB ID）
-TEST_GAME_IDS = [
+# /waifu 2025 限定作品（新收录作品的 VNDB ID；已下放普通池，这里仅作限定抽取入口）
+NEW_GAME_IDS = [
     "v62721", "v50215",
     "v63385", "v57252", "v57740", "v58009", "v56400", "v60562",
     "v56862", "v60096", "v60213", "v62700", "v63472", "v59534",
@@ -94,7 +94,7 @@ def _help_text() -> str:
 - /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
 - /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
 - /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
-- /waifu test —— 测试抽卡（每人每天限 1 次；只从新收录作品的角色中抽取，不占用每日额度）
+- /waifu 2025 —— 从 2025 新收录作品池抽取（与 /waifu 共享每日额度）
 - /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）
 - /yuzuwaifu list [<QQ号>|@对方] —— 查看今天的每日老婆（含稀有度）
 - /yuzuwaifu trade @对方 —— 提议交换双方的今日柚子社每日老婆（按会社判断，/waifu 抽到柚子社角色也可交易）
@@ -307,27 +307,45 @@ async def _draw_local_character(
     group_settings: dict,
     source: str = "waifu",
     exclude_ids: set[str] | None = None,
+    game_ids: list[str] | None = None,
 ) -> library.LibraryCharacter | None:
-    """从 final_company_library 抽卡：优先群会社后门，其次全局会社池。"""
+    """从 final_company_library 抽卡：优先群会社后门，其次全局会社池。
+
+    全局会社池为随机单会社，可能随机到库内无可用角色的会社
+    （如 2010+ 年代过滤后为空），此时重新随机会会社重试，最多 8 次。
+    game_ids 非空时只在指定作品内抽取（如 /waifu 2025 限定新收录作品）。
+    """
     year_from = 0 if group_settings["year_off"] else settings.get("year_from", 0)
     year_to = 0 if group_settings["year_off"] else settings.get("year_to", 0)
     if source == "yuzu":
         company_ids = ["p98", "p12215"]
         lru = False
+    elif game_ids:
+        company_ids = None
+        lru = True
     elif group_settings["company_ids"]:
         company_ids = [str(item) for item in group_settings["company_ids"]]
         lru = True
     else:
-        _, company_ids = _pick_pool_company(settings)
+        company_ids = None
         lru = True
-    return await asyncio.to_thread(
-        library.random_character,
-        company_ids=company_ids or None,
-        year_from=year_from,
-        year_to=year_to,
-        lru=lru,
-        exclude_ids=exclude_ids,
-    )
+    for _ in range(8 if company_ids is None else 1):
+        if company_ids is None:
+            _, company_ids = _pick_pool_company(settings)
+        character = await asyncio.to_thread(
+            library.random_character,
+            company_ids=company_ids or None,
+            year_from=year_from,
+            year_to=year_to,
+            lru=lru,
+            exclude_ids=exclude_ids,
+            game_ids=game_ids,
+        )
+        if character is not None:
+            return character
+        if company_ids is not None:
+            company_ids = None
+    return None
 
 
 async def _cmd_waifu(
@@ -348,51 +366,60 @@ async def _cmd_waifu(
             "病毒@kitsurato様のご協力誠にありがとうございます。"
         )
 
-    if command == "test":
-        test_arg = arg.strip()
-        if test_arg == "reset":
-            if not permissions.is_admin(user_id):
-                await matcher.finish("只有管理员可以重置测试")
-            if not waifu_usage.test_used_today(user_id):
-                await matcher.finish("你今天还没用过 /waifu test，无需重置")
-            waifu_usage.reset_test_waifu(user_id)
-            await matcher.finish("已重置今天的 /waifu test，可以重新测试了")
-        existing_test = waifu_usage.get_test_waifu(user_id)
-        if existing_test:
-            reply_image = await _record_reply_image(existing_test)
+    if command == "2025":
+        # 新收录作品池：与普通 /waifu 共享每日额度
+        existing = waifu.get_today_waifu(user_id)
+        if existing:
+            reply_image = await _record_reply_image(existing)
+            if existing.get("source") == "yuzu":
+                repeat_note = (
+                    "你今天已经抽过 /yuzuwaifu 了，"
+                    "这是你今天的柚子社老婆（重复展示）"
+                )
+            else:
+                repeat_note = (
+                    "你今天已经抽过 /waifu 了，"
+                    "这是你今天的每日老婆（重复展示）"
+                )
             await matcher.finish(
                 _waifu_reply(
                     event,
                     reply_image,
-                    "你今天已经用过 /waifu test，这是你的测试结果（仅测试，不占用今日额度）",
+                    repeat_note,
                 )
             )
-        waifu_usage.mark_test_used(user_id)
-        local = await asyncio.to_thread(
-            library.random_character,
-            game_ids=TEST_GAME_IDS,
+        settings = waifu.load_settings()
+        group_settings = _event_group_settings(event)
+        exclude_ids = (
+            waifu.taken_character_ids(group_id, user_id)
+            if group_id is not None
+            else set()
+        )
+        local = await _draw_local_character(
+            settings,
+            group_settings,
+            "waifu",
+            exclude_ids,
+            game_ids=NEW_GAME_IDS,
         )
         if local is None:
-            await matcher.finish("测试角色不存在，请检查资料库")
-        waifu_usage.save_test_waifu(
+            await matcher.finish("新收录作品池暂时抽不到老婆，请稍后再试")
+        character = _to_vndb_character(local)
+        record = waifu.save_waifu(
             user_id,
-            {
-                "date": waifu._today(),
-                "character_id": local.id,
-                "name": local.name,
-                "original": local.original,
-                "image_url": local.image_url or "",
-                "library_path": _library_path(local),
-            },
+            character,
+            source="waifu",
+            library_path=_library_path(local),
+            group_id=group_id,
+            role=str(local.data.get("role") or ""),
         )
-        image_url = await _local_reply_image(
-            local, local.image_url or ""
-        )
+        waifu_usage.mark_used(character.id)
+        image_url = await _local_reply_image(local, record.get("image_url") or "")
         await matcher.finish(
             _waifu_reply(
                 event,
                 image_url,
-                "【测试抽卡】新收录作品限定（仅测试，不占用今日每日老婆额度）",
+                _waifu_text(record, "【2025 新收录作品池】"),
             )
         )
 
@@ -614,7 +641,7 @@ async def _cmd_waifu(
         await matcher.finish("用法：/waifu reset [all|<QQ号>]")
     else:
         await matcher.finish(
-            "用法：/waifu [reroll|set <角色名>|check <QQ号>|"
+            "用法：/waifu [reroll|set <角色名>|check <QQ号>|2025|"
             "settings|reset [all|<QQ号>]]"
         )
 

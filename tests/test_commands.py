@@ -477,6 +477,40 @@ async def test_waifu_draws_from_local_library_and_sends_card(
     assert "你今天的老婆" not in str(matcher.sent[-1])
 
 
+async def test_waifu_2025_draws_from_new_games_and_shares_quota(
+    monkeypatch, tmp_path
+) -> None:
+    """/waifu 2025 从限定作品池抽取，与普通 /waifu 共享每日额度。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path / "data"))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path / "data"))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_library(library_root)
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+
+    async def fake_render(character):
+        return b"JPEG-CARD"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    monkeypatch.setattr(commands, "NEW_GAME_IDS", ["v1"])
+    matcher = _FakeMatcher()
+
+    # 第一次抽：写入普通 waifu 额度
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), "2025"))
+    record = waifu.get_today_waifu(123)
+    assert record is not None
+    assert record["source"] == "waifu"
+    assert record["character_id"] == "c1"
+    assert waifu_usage.last_used("c1") is not None
+    assert "2025" in str(matcher.sent[-1])
+
+    # 已抽过：重复展示，不再新抽
+    sent_before = len(matcher.sent)
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), "2025"))
+    assert len(matcher.sent) == sent_before + 1
+    assert "重复展示" in str(matcher.sent[-1])
+
+
 async def test_yuzuwaifu_draws_local_yuzusoft_card(
     monkeypatch, tmp_path
 ) -> None:
@@ -700,3 +734,57 @@ def test_waifu_test_save_and_reset(tmp_path, monkeypatch) -> None:
     waifu_usage.reset_test_waifu(111)
     assert waifu_usage.get_test_waifu(111) is None
     assert waifu_usage.test_used_today(111) is False
+
+
+async def test_draw_local_retries_empty_pool_company(monkeypatch) -> None:
+    """随机会会社选中空会社时，应重选其他会社而非直接返回 None。"""
+    settings = {
+        "pool_companies": ["empty", "good"],
+        "pool_company_ids": {"empty": ["p999"], "good": ["p98"]},
+        "year_from": 0,
+        "year_to": 0,
+    }
+    group_settings = {
+        "companies": [],
+        "company_ids": [],
+        "year_off": True,
+        "popular_off": True,
+    }
+    picks = iter([("empty", ["p999"]), ("good", ["p98"])])
+    monkeypatch.setattr(commands, "_pick_pool_company", lambda s: next(picks))
+    results = iter([None, object()])
+    monkeypatch.setattr(
+        library,
+        "random_character",
+        lambda **kwargs: next(results),
+    )
+    character = await commands._draw_local_character(
+        settings, group_settings, source="waifu"
+    )
+    assert character is not None
+
+
+async def test_draw_local_returns_none_when_all_empty(monkeypatch) -> None:
+    """所有会社都为空时才返回 None（不无限重试）。"""
+    settings = {
+        "pool_companies": ["empty"],
+        "pool_company_ids": {"empty": ["p999"]},
+        "year_from": 0,
+        "year_to": 0,
+    }
+    group_settings = {
+        "companies": [],
+        "company_ids": [],
+        "year_off": True,
+        "popular_off": True,
+    }
+    monkeypatch.setattr(
+        commands,
+        "_pick_pool_company",
+        lambda s: ("empty", ["p999"]),
+    )
+    monkeypatch.setattr(library, "random_character", lambda **kwargs: None)
+    character = await commands._draw_local_character(
+        settings, group_settings, source="waifu"
+    )
+    assert character is None

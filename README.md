@@ -8,6 +8,7 @@
 | 命令 | 说明 |
 | --- | --- |
 | `/waifu` | 从 `final_company_library` 抽每日老婆，生成角色信息卡片（左立绘 / 右信息简介 / 右下会社 logo） |
+| `/waifu 2025` | 从 2025 新收录作品池抽取（与 `/waifu` 共享每日额度） |
 | `/yuzuwaifu` | 柚子社专属老婆（固定 Yuzusoft，同样输出角色卡片，与 `/waifu` 共享每日额度） |
 | `/waifu settings` | 查看/修改抽卡设置（热度、年代、全局会社池；仅管理员） |
 | `/waifu settings pool set|off` | 设置 final_company_library 全量会社池 / 关闭 |
