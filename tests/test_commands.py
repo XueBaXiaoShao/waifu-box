@@ -1143,28 +1143,86 @@ def _prepare_company_test(monkeypatch, tmp_path, directory: str, company_id: str
     commands.collection_book._company_id_cache.clear()
 
 
-async def test_keywaifu_draws_local_key_card(monkeypatch, tmp_path) -> None:
-    """/keywaifu 从本地库固定抽 Key 角色，且不参与 LRU。"""
+@pytest.mark.parametrize(
+    "source,directory,company_id,vndb_name,char_id,char_name",
+    [
+        ("key", "Key", "p24", "Key", "c100", "Key酱"),
+        ("saga", "SAGA", "p378", "SAGA PLANETS", "c200", "SAGA酱"),
+        ("purple", "Purple", "p132", "Purple software", "c300", "Purple酱"),
+    ],
+)
+async def test_company_waifu_draws_local_card(
+    monkeypatch,
+    tmp_path,
+    source,
+    directory,
+    company_id,
+    vndb_name,
+    char_id,
+    char_name,
+) -> None:
+    """会社入口从本地库固定抽对应会社角色，且不参与 LRU。"""
     _prepare_company_test(
-        monkeypatch, tmp_path, "Key", "p24", "Key", "c100", "Key酱"
+        monkeypatch,
+        tmp_path,
+        directory,
+        company_id,
+        vndb_name,
+        char_id,
+        char_name,
     )
 
     async def fake_render(character):
-        return b"JPEG-KEY"
+        return b"JPEG-COMPANY"
 
     monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(
+        commands._cmd_waifu(matcher, _FakeEvent(123), "", source=source)
+    )
+
+    record = waifu.get_today_waifu(123)
+    assert record is not None
+    assert record["source"] == source
+    assert record["character_id"] == char_id
+    assert record["library_path"].endswith(f"{char_name}.json")
+    assert waifu_usage.last_used(char_id) is None
+    assert "base64://" in str(matcher.sent[-1])
+
+
+async def test_keywaifu_vndb_fallback_uses_company_filter(
+    monkeypatch, tmp_path
+) -> None:
+    """/keywaifu 本地库不可用时回退 VNDB，仍固定传 Key 的厂商 ID。"""
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(
+        library.config, "library_dir", str(tmp_path / "no_library")
+    )
+    library.reset_cache()
+    commands._fixed_company_ids_cache.clear()
+
+    captured = {}
+
+    async def fake_random(**kwargs):
+        captured.update(kwargs)
+        return _character("c-key")
+
+    monkeypatch.setattr(vndb, "random_female_character", fake_random)
+    monkeypatch.setattr(commands, "_company_ids", _FakeAsync(["p24"]))
     matcher = _FakeMatcher()
     await _run(
         commands._cmd_waifu(matcher, _FakeEvent(123), "", source="key")
     )
 
+    assert captured["company_ids"] == ["p24"]
+    assert captured["cache_key"] == "key"
     record = waifu.get_today_waifu(123)
-    assert record is not None
-    assert record["source"] == "key"
-    assert record["character_id"] == "c100"
-    assert record["library_path"].endswith("Key酱.json")
-    assert waifu_usage.last_used("c100") is None
-    assert "base64://" in str(matcher.sent[-1])
+    assert record is not None and record["source"] == "key"
+    assert record["character_id"] == "c-key"
+    assert waifu_usage.last_used("c-key") is None
 
 
 async def test_company_entries_share_daily_quota(monkeypatch, tmp_path) -> None:
