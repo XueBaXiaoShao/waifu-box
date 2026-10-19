@@ -220,6 +220,14 @@ def games(
     return result
 
 
+def count_characters(*, company_ids: list[str] | None = None) -> int:
+    """统计资料库中（某会社）的角色总数；company_ids 为空时统计全部。"""
+    total = 0
+    for game in games(company_ids=company_ids):
+        total += len(game.character_ids)
+    return total
+
+
 def _load_game_characters(game: LibraryGame) -> dict[str, LibraryCharacter]:
     """读取一部作品目录下的全部角色 JSON（带内存缓存）。"""
     cached = _game_characters.get(game.id)
@@ -263,6 +271,67 @@ def _pick_lru(candidates: list[LibraryCharacter]) -> LibraryCharacter:
     return random.choice(bucket)
 
 
+def excluded_ids() -> set[str]:
+    """读取抽卡黑名单（疑似异常立绘/不适宜角色），持久化在 waifu_excluded.json。"""
+    path = Path(config.data_dir) / "waifu_excluded.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    ids = payload.get("excluded") if isinstance(payload, dict) else None
+    if not isinstance(ids, list):
+        return set()
+    return {str(item) for item in ids if str(item).strip()}
+
+
+def add_excluded(character_id: str) -> None:
+    """把角色加入抽卡黑名单（幂等）。"""
+    cid = str(character_id or "").strip()
+    if not cid:
+        return
+    path = Path(config.data_dir) / "waifu_excluded.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current = excluded_ids()
+    if cid in current:
+        return
+    current.add(cid)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {"version": 1, "excluded": sorted(current)},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def remove_excluded(character_id: str) -> bool:
+    """把角色移出黑名单；返回是否移除成功。"""
+    cid = str(character_id or "").strip()
+    if not cid:
+        return False
+    path = Path(config.data_dir) / "waifu_excluded.json"
+    current = excluded_ids()
+    if cid not in current:
+        return False
+    current.discard(cid)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {"version": 1, "excluded": sorted(current)},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+    return True
+
+
 def random_character(
     *,
     company_ids: list[str] | None = None,
@@ -275,8 +344,9 @@ def random_character(
     """随机抽取一名有立绘的女性角色（资料库内）；exclude_ids 中的角色会被排除。
 
     game_ids 非空时只在指定作品内抽取（如 /waifu test 限定新收录作品）。
+    持久化黑名单（waifu_excluded.json）中的角色永远排除。
     """
-    exclude_ids = exclude_ids or set()
+    exclude_ids = set(exclude_ids or set()) | excluded_ids()
     candidates_games = games(
         company_ids=company_ids,
         year_from=year_from,

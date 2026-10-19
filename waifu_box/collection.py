@@ -1,9 +1,8 @@
 """每日老婆交易系统（基于 waifu_state.json 的今日记录）。
 
 只允许交换每天抽到的每日老婆（/waifu 或 /yuzuwaifu 的记录），
-每人每天只有一条记录，展示与交易都读同一数据源，不存在卡号错位问题。
-交易资格按角色会社判断（柚子社 p98 / 柚子社SOUR p12215），
-与抽卡命令无关：/waifu 抽到柚子社角色同样可以交易。
+任意角色均可交易；每人每天只有一条记录，展示与交易都读同一数据源，
+不存在卡号错位问题。
 角色按其在作品中的定位（role）定稀有度，仅用于展示与排行榜。
 """
 
@@ -126,6 +125,14 @@ def require_yuzu_waifu(user_id: int) -> dict[str, Any]:
     return record
 
 
+def require_trade_waifu(user_id: int) -> dict[str, Any]:
+    """返回用户今天的每日老婆（任意角色均可交易）；未抽抛 ValueError。"""
+    record = waifu.get_today_waifu(user_id)
+    if record is None:
+        raise ValueError("你还没有抽今天的每日老婆，先抽一张 /waifu 或 /yuzuwaifu 吧")
+    return record
+
+
 def _new_trade_id() -> str:
     return uuid.uuid4().hex[:8].upper()
 
@@ -134,14 +141,14 @@ def propose_trade(
     proposer_id: int,
     target_id: int,
 ) -> dict[str, Any]:
-    """发起交易：提议用双方的今日柚子社每日老婆互换；双方都必须是柚子社。"""
+    """发起交易：提议用双方今天的每日老婆互换（任意角色均可交易）。"""
     if proposer_id == target_id:
         raise ValueError("不能和自己交易")
-    require_yuzu_waifu(proposer_id)
+    require_trade_waifu(proposer_id)
     try:
-        require_yuzu_waifu(target_id)
+        require_trade_waifu(target_id)
     except ValueError:
-        raise ValueError("对方今天还没有柚子社每日老婆，暂时不能交易") from None
+        raise ValueError("对方今天还没抽每日老婆，暂时不能交易") from None
     now = datetime.now()
     trade: dict[str, Any] = {
         "id": _new_trade_id(),
@@ -218,10 +225,6 @@ def accept_trade(
             target_record = waifu.get_today_waifu(user_id)
             if proposer_record is None or target_record is None:
                 raise ValueError("有一方今天还没抽每日老婆，交易失效")
-            if not is_yuzu_record(proposer_record) or not is_yuzu_record(
-                target_record
-            ):
-                raise ValueError("交易对象不是柚子社每日老婆，交易失效")
             waifu.swap_today_waifu(proposer_id, user_id)
         except ValueError as exc:
             raise ValueError(str(exc)) from None

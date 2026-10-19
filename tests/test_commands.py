@@ -14,6 +14,7 @@ from waifu_box import (
     commands,
     http,
     library,
+    stats,
     vndb,
     waifu,
     waifu_cache,
@@ -74,6 +75,107 @@ def _character(char_id: str = "c1") -> VNDBCharacter:
 def test_slash_rules() -> None:
     assert commands._is_slash_waifu(_FakeEvent(1)) is True
     assert commands._is_slash_yuzuwaifu(_FakeEvent(1)) is False
+
+
+async def test_waifu_collection_command_shows_book(tmp_path, monkeypatch) -> None:
+    """/waifu collection 展示图鉴，含来源统计。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    import waifu_box.collection_book as cb
+    monkeypatch.setattr(cb.config, "data_dir", str(tmp_path))
+    cb._loaded = False
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c1", name="四季 ナツメ", original="四季 ナツメ"),
+        source="yuzu",
+        role="primary",
+    )
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c2", name="野村 美希", original="野村 美希"),
+        source="waifu",
+        role="main",
+    )
+
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(111), "collection"))
+    text = str(matcher.sent[-1])
+    assert "四季 ナツメ" in text
+    assert "野村 美希" in text
+    assert "柚子 1" in text
+    assert "常规 1" in text
+
+
+async def test_waifu_rank_shows_member_names(tmp_path, monkeypatch) -> None:
+    """/waifu rank 展示群名片，取不到回退 QQ 号。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection.config, "data_dir", str(tmp_path))
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c1", name="甲", original="甲"),
+        source="waifu",
+        role="primary",
+        group_id=912875556,
+    )
+    waifu.save_waifu(
+        222,
+        VNDBCharacter(id="c2", name="乙", original="乙"),
+        source="waifu",
+        role="side",
+        group_id=912875556,
+    )
+
+    class _FakeBot:
+        async def get_group_member_info(self, group_id, user_id, no_cache=False):
+            if int(user_id) == 111:
+                return {"card": "群名片甲", "nickname": "昵称甲"}
+            raise RuntimeError("查询失败")
+
+    monkeypatch.setattr(
+        commands.nonebot, "get_bot", lambda: _FakeBot(), raising=False
+    )
+
+    matcher = _FakeMatcher()
+    await _run(
+        commands._handle_yuzu_trade(
+            matcher, _FakeGroupEvent(111, 912875556), "rank", ""
+        )
+    )
+    text = str(matcher.sent[-1])
+    assert "群名片甲" in text
+    assert "222" in text  # 查询失败回退 QQ 号
+    assert "用户 111" not in text
+
+
+async def test_waifu_trade_dispatches_to_handler(tmp_path, monkeypatch) -> None:
+    """/waifu trade @对方 与 /yuzuwaifu trade 共用交易实现（任意角色）。"""
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection.config, "data_dir", str(tmp_path))
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c1", name="Hero-111", original="ヒーロー-111"),
+        source="waifu",
+        role="main",
+    )
+    waifu.save_waifu(
+        222,
+        VNDBCharacter(id="c2", name="Hero-222", original="ヒーロー-222"),
+        source="waifu",
+        role="side",
+    )
+
+    class _AtSegment:
+        type = "at"
+        data = {"qq": "222"}
+
+    class _TradeEvent(_FakeGroupEvent):
+        def __init__(self) -> None:
+            super().__init__(111, 912875556)
+            self.message = [_AtSegment()]
+
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _TradeEvent(), "trade"))
+    text = str(matcher.sent[-1]) if matcher.sent else ""
+    assert "交易提议" in text
 
 
 def test_resolve_trade_id_without_id(tmp_path, monkeypatch) -> None:
@@ -257,6 +359,32 @@ async def test_waifu_check_requires_admin() -> None:
     matcher = _FakeMatcher()
     await _run(commands._cmd_waifu(matcher, _FakeEvent(1), "check 123"))
     assert "只有管理员" in str(matcher.sent[-1])
+
+
+async def test_waifu_stats_requires_admin() -> None:
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(1), "stats"))
+    assert "只有管理员" in str(matcher.sent[-1])
+
+
+async def test_waifu_stats_admin_shows_ranking(monkeypatch, tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    _make_admin(data_dir, admin_id=999)
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(stats.config, "data_dir", str(data_dir))
+    stats._history_loaded = False
+
+    stats.record_draw("c1", "四季 ナツメ")
+    stats.record_draw("c1", "四季 ナツメ")
+    stats.record_draw("c2", "野村 美希")
+
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "stats"))
+    text = str(matcher.sent[-1])
+    assert "角色抽取排行榜" in text
+    assert "四季 ナツメ（2 次）" in text
+    assert "野村 美希（1 次）" in text
 
 
 async def test_yuzuwaifu_set_keeps_yuzu_source(monkeypatch, tmp_path) -> None:
@@ -701,7 +829,7 @@ def test_trade_pick_hint_lists_both_sides(tmp_path, monkeypatch) -> None:
     assert "SSR" in hint
     assert "【用户 222 今天的每日老婆】" in hint
     assert "叢雨" in hint
-    assert "互换请发：/yuzuwaifu trade @对方" in hint
+    assert "互换请发：/waifu trade @对方" in hint
 
 
 def test_waifu_test_daily_limit(tmp_path, monkeypatch) -> None:
@@ -788,3 +916,142 @@ async def test_draw_local_returns_none_when_all_empty(monkeypatch) -> None:
         settings, group_settings, source="waifu"
     )
     assert character is None
+
+
+def test_collection_note_new_vs_duplicate(tmp_path, monkeypatch) -> None:
+    """抽卡反馈：新角色提示收录进度，已有角色提示不重复收录。"""
+    import waifu_box.collection_book as cb
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(cb.config, "data_dir", str(tmp_path))
+    cb._loaded = False
+
+    record = {
+        "character_id": "c1",
+        "name": "四季 ナツメ",
+        "original": "四季 ナツメ",
+        "source": "yuzu",
+        "vns": [{"id": "v1", "title": "千恋＊万花"}],
+    }
+    note1 = commands._collection_note(100, record)
+    assert "新角色已收录" in note1
+    assert "当前共 1 位" in note1
+
+    note2 = commands._collection_note(100, record)
+    assert "已在你的图鉴中" in note2
+    assert "不重复收录" in note2
+
+
+def test_collection_note_new_vs_duplicate(tmp_path, monkeypatch) -> None:
+    """抽卡反馈：新角色提示收录进度，已有角色提示不重复收录。"""
+    import waifu_box.collection_book as cb
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(cb.config, "data_dir", str(tmp_path))
+    cb._loaded = False
+
+    record = {
+        "character_id": "c1",
+        "name": "四季 ナツメ",
+        "original": "四季 ナツメ",
+        "source": "yuzu",
+        "vns": [{"id": "v1", "title": "千恋＊万花"}],
+    }
+    note1 = commands._collection_note(100, record)
+    assert "新角色已收录" in note1
+    assert "当前共 1 位" in note1
+
+    note2 = commands._collection_note(100, record)
+    assert "已在你的图鉴中" in note2
+    assert "不重复收录" in note2
+
+
+async def test_yuzuwaifu_collection_only_yuzu(tmp_path, monkeypatch) -> None:
+    """/yuzuwaifu collection 只展示柚子社角色。"""
+    import waifu_box.collection_book as cb
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(cb.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(commands.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection.config, "data_dir", str(tmp_path))
+    cb._loaded = False
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c1", name="柚子甲", original="柚子甲"),
+        source="yuzu",
+        role="primary",
+    )
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c2", name="常规乙", original="常规乙"),
+        source="waifu",
+        role="main",
+    )
+
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(111), "collection yuzu"))
+    text = str(matcher.sent[-1])
+    assert "柚子甲" in text
+    assert "常规乙" not in text
+
+    matcher2 = _FakeMatcher()
+    await _run(
+        commands._handle_yuzu_trade(matcher2, _FakeGroupEvent(111, 912875556), "collection", "")
+    )
+    text2 = str(matcher2.sent[-1])
+    assert "柚子甲" in text2
+    assert "常规乙" not in text2
+
+
+def test_shiki_natsume_easter_egg_matcher() -> None:
+    assert commands._is_shiki_natsume_easter_egg("shiki natsume")
+    assert commands._is_shiki_natsume_easter_egg("SHIKI NATSUME")
+    assert commands._is_shiki_natsume_easter_egg("natume")
+    assert commands._is_shiki_natsume_easter_egg("なつめ")
+    assert commands._is_shiki_natsume_easter_egg("  shiki natsume  ")
+    assert not commands._is_shiki_natsume_easter_egg("shiki")
+    assert not commands._is_shiki_natsume_easter_egg("natsume daisuki")
+    assert not commands._is_shiki_natsume_easter_egg("")
+
+
+async def test_yuzuwaifu_shiki_natsume_returns_holy_text(monkeypatch) -> None:
+    texts = commands._NATSUME_HOLY_TEXTS
+    assert len(texts) >= 1
+    assert any("ナツメ" in t for t in texts)
+
+    # 直接验证 _cmd_waifu 流程：yuzuwaifu 入口彩蛋分支
+    matcher = _FakeMatcher()
+    monkeypatch.setattr(commands.random, "choice", lambda seq: seq[0])
+    await _run(commands.handle_yuzuwaifu_short(_FakeEvent(1), matcher, Message("shiki natsume")))
+    sent = str(matcher.sent[-1])
+    assert ("ナツメ" in sent) or ("棗子姐" in sent)
+
+
+async def test_waifu_admin_collection_other_user(monkeypatch, tmp_path) -> None:
+    """管理员 /waifu collection <QQ号> 查看他人图鉴。"""
+    import json
+    import waifu_box.collection_book as cb
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "admin_ids.json").write_text(
+        json.dumps({"admins": [999]}), encoding="utf-8"
+    )
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(cb.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(collection.config, "data_dir", str(data_dir))
+    from waifu_box import permissions as perms
+    monkeypatch.setattr(perms.config, "data_dir", str(data_dir))
+    cb._loaded = False
+    monkeypatch.setattr(cb.waifu.config, "data_dir", str(data_dir))
+
+    # 目标用户有图鉴
+    cb.rec_collect_id(222, "c1", name="他人角色", source="yuzu", role="primary")
+
+    matcher = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher, _FakeEvent(999), "collection 222"))
+    text = str(matcher.sent[-1])
+    assert "他人的图鉴" in text
+    assert "他人角色" in text
+
+    # 非管理员看不到他人图鉴（按自己图鉴处理）
+    matcher2 = _FakeMatcher()
+    await _run(commands._cmd_waifu(matcher2, _FakeEvent(123), "collection 222"))
+    assert "他人角色" not in str(matcher2.sent[-1])

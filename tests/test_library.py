@@ -160,3 +160,38 @@ def test_logo_index_uses_csv(tmp_path, monkeypatch) -> None:
 
     assert logos.logo_path_for_companies(["p98"]) == logo
     assert logos.company_names(["p98"]) == ["Yuzusoft"]
+
+
+def test_excluded_ids_round_trip(tmp_path, monkeypatch) -> None:
+    """黑名单持久化：读、增、删（幂等）。"""
+    monkeypatch.setattr(library.config, "data_dir", str(tmp_path))
+    assert library.excluded_ids() == set()
+
+    library.add_excluded("c155769")
+    assert library.excluded_ids() == {"c155769"}
+    library.add_excluded("c155769")  # 幂等
+    assert library.excluded_ids() == {"c155769"}
+    library.add_excluded("c111")
+    assert library.excluded_ids() == {"c111", "c155769"}
+
+    assert library.remove_excluded("c111") is True
+    assert library.excluded_ids() == {"c155769"}
+    assert library.remove_excluded("c111") is False  # 已不在
+
+
+def test_random_character_respects_persistent_blacklist(tmp_path, monkeypatch) -> None:
+    """持久化黑名单中的角色不会被抽到。"""
+    _build_library(tmp_path)
+    monkeypatch.setattr(library.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(library.config, "library_dir", str(tmp_path))
+    library.reset_cache()
+
+    # 库里只有 c1/c2 两个女性角色，把两个都加入黑名单 → 抽不到
+    library.add_excluded("c1")
+    library.add_excluded("c2")
+    assert library.random_character(company_ids=["p98"]) is None
+
+    # 移除其中一个 → 只能抽到它
+    library.remove_excluded("c1")
+    picked = library.random_character(company_ids=["p98"])
+    assert picked is not None and picked.id == "c1"

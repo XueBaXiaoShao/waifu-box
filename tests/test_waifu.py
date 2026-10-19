@@ -113,3 +113,47 @@ def test_group_backdoors(tmp_path, monkeypatch) -> None:
     assert waifu.get_group_company(912875556)["company_ids"] == ["p98", "p12215"]
     assert waifu.get_group_year_off(912875556) is True
     assert waifu.get_group_popular_off(912875556) is True
+
+
+def test_swap_collects_into_collection_book(tmp_path, monkeypatch) -> None:
+    """交易互换后，双方获得的新角色自动收录进图鉴。"""
+    from waifu_box import collection_book
+    from waifu_box.models import VNDBCharacter
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection_book.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection_book.waifu.config, "data_dir", str(tmp_path))
+    collection_book._loaded = False
+
+    waifu.save_waifu(111, VNDBCharacter(id="c1", name="甲", original="甲"), role="primary")
+    waifu.save_waifu(222, VNDBCharacter(id="c2", name="乙", original="乙"), role="side")
+    # 抽卡时已各自收录自己的角色
+    assert "c1" in collection_book.user_collection(111)
+    assert "c2" not in collection_book.user_collection(111)
+
+    waifu.swap_today_waifu(111, 222)
+
+    # 交换后 111 拿到 c2、222 拿到 c1，均应收录
+    assert "c2" in collection_book.user_collection(111)
+    assert "c1" in collection_book.user_collection(222)
+
+
+def test_sync_from_state_backfills(tmp_path, monkeypatch) -> None:
+    """sync_from_state 补录当前 waifu_state 记录（修复历史交易遗漏）。"""
+    from waifu_box import collection_book
+    from waifu_box.models import VNDBCharacter
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection_book.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(collection_book.waifu.config, "data_dir", str(tmp_path))
+    collection_book._loaded = False
+
+    waifu.save_waifu(333, VNDBCharacter(id="c9", name="千歳 佐奈", original="千歳 佐奈"), role="primary")
+    # 模拟遗漏：从图鉴内存和持久化中移除
+    from waifu_box.collection_book import _collections, _save_persisted
+    _collections.pop("333", None)
+    _save_persisted()
+    assert collection_book.collection_size(333) == 0
+
+    assert collection_book.sync_from_state(333) is True
+    assert "c9" in collection_book.user_collection(333)
+    # 幂等
+    assert collection_book.sync_from_state(333) is False

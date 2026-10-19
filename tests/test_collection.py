@@ -128,8 +128,8 @@ def test_trade_requires_today_waifu(tmp_path, monkeypatch) -> None:
         collection.accept_trade(trade_id, 222)
 
 
-def test_trade_yuzu_only(tmp_path, monkeypatch) -> None:
-    """非柚子社角色（无本地库、/waifu 抽的）暂时不能交易。"""
+def test_trade_any_character(tmp_path, monkeypatch) -> None:
+    """任意角色（含 /waifu 抽的非柚子社）均可交易。"""
     _set_today(tmp_path, monkeypatch, 111, "c1", "primary")
     waifu.save_waifu(
         222,
@@ -137,21 +137,12 @@ def test_trade_yuzu_only(tmp_path, monkeypatch) -> None:
         source="waifu",
         role="main",
     )
-    # 对方是 /waifu 抽的未知会社角色 → 不能交易
-    with pytest.raises(ValueError):
-        collection.propose_trade(111, 222)
-    with pytest.raises(ValueError):
-        collection.propose_trade(222, 111)
-    # 接受时如果有一方变成了非柚子社（管理员 set 过），交易失效
-    _set_today(tmp_path, monkeypatch, 222, "c2", "side")
-    trade_id = collection.propose_trade(111, 222)["id"]
-    state = json.loads((tmp_path / "waifu_state.json").read_text("utf-8"))
-    state["users"]["222"]["source"] = "waifu"
-    (tmp_path / "waifu_state.json").write_text(
-        json.dumps(state, ensure_ascii=False), encoding="utf-8"
-    )
-    with pytest.raises(ValueError):
-        collection.accept_trade(trade_id, 222)
+    # 双方任意角色都能发起交易
+    trade = collection.propose_trade(111, 222)
+    assert trade["status"] == "pending"
+    # 接受后今日老婆互换
+    _, _, done = collection.accept_trade(trade["id"], 222)
+    assert done["status"] == "done"
 
 
 def test_trade_yuzu_by_company(tmp_path, monkeypatch) -> None:
@@ -177,12 +168,8 @@ def test_trade_yuzu_by_company(tmp_path, monkeypatch) -> None:
         library_path="ゆずソフト/ライムライト・レモネードジャム/角色/礫川 美玖.json",
     )
     assert collection.is_yuzu_record(waifu.get_today_waifu(222))
-    trade_id = collection.propose_trade(111, 222)["id"]
-    give, take, _ = collection.accept_trade(trade_id, 222)
-    assert give["character_id"] == "c1"
-    assert take["character_id"] == "c2"
 
-    # 非柚子社的本地库角色仍不可交易
+    # 非柚子社的本地库角色现在也可以交易
     other_file = (
         library_dir / "ほかほか" / "その他" / "角色" / "誰か.json"
     )
@@ -197,8 +184,8 @@ def test_trade_yuzu_by_company(tmp_path, monkeypatch) -> None:
         role="main",
         library_path="ほかほか/その他/角色/誰か.json",
     )
-    with pytest.raises(ValueError):
-        collection.propose_trade(111, 333)
+    trade_id2 = collection.propose_trade(111, 333)["id"]
+    assert collection.accept_trade(trade_id2, 333)[2]["status"] == "done"
 
 
 def test_trade_reject_and_expire(tmp_path, monkeypatch) -> None:

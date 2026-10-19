@@ -255,6 +255,10 @@ def save_waifu(
         payload = _load()
         payload.setdefault("users", {})[str(user_id)] = record
         _write(payload)
+    from . import collection_book, stats
+
+    collection_book.rec_collect(user_id, record)
+    stats.record_draw(character.id, character.original or character.name, source=source)
     return record
 
 
@@ -278,7 +282,12 @@ def swap_today_waifu(
         users[str(user_a)] = record_b
         users[str(user_b)] = record_a
         _write(payload)
-        return record_b, record_a
+    # 交易获得的新角色同样收录进图鉴（交换后各自的角色已确定）
+    from . import collection_book
+
+    collection_book.rec_collect(user_a, record_b)
+    collection_book.rec_collect(user_b, record_a)
+    return record_b, record_a
 
 
 def taken_character_ids(group_id: int, exclude_user_id: int) -> set[str]:
