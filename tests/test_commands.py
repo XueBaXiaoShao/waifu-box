@@ -1055,3 +1055,177 @@ async def test_waifu_admin_collection_other_user(monkeypatch, tmp_path) -> None:
     matcher2 = _FakeMatcher()
     await _run(commands._cmd_waifu(matcher2, _FakeEvent(123), "collection 222"))
     assert "他人角色" not in str(matcher2.sent[-1])
+
+
+def test_fixed_company_command_rules() -> None:
+    """会社专属入口只匹配自己的斜杠命令。"""
+    class _E:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_plaintext(self) -> str:
+            return self._text
+
+    assert commands._is_slash_keywaifu(_E("/keywaifu"))
+    assert commands._is_slash_keywaifu(_E("/keywaifu collection"))
+    assert not commands._is_slash_keywaifu(_E("/waifu"))
+    assert commands._is_slash_sagawaifu(_E("/sagawaifu"))
+    assert not commands._is_slash_sagawaifu(_E("/keywaifu"))
+    assert commands._is_slash_purplewaifu(_E("/purplewaifu"))
+    assert not commands._is_slash_purplewaifu(_E("/purplewaifu2"))
+
+
+def _build_fake_company_library(
+    root: Path,
+    dirname: str,
+    company_id: str,
+    vndb_name: str,
+    char_id: str,
+    char_name: str,
+) -> None:
+    """构造单会社单角色资料库（Key/SAGA/Purple 测试用）。"""
+    company_dir = root / dirname
+    company_dir.mkdir(parents=True, exist_ok=True)
+    (company_dir / "公司索引.json").write_text(
+        json.dumps(
+            {"id": company_id, "name": dirname, "vndb_name": vndb_name}
+        ),
+        encoding="utf-8",
+    )
+    game_dir = company_dir / "作品"
+    game_dir.mkdir(parents=True, exist_ok=True)
+    (game_dir / "游戏介绍.json").write_text(
+        json.dumps(
+            {
+                "id": f"v-{company_id}",
+                "title": f"{vndb_name} Game",
+                "jp_title": f"{vndb_name} 作品",
+                "released": "2020-01-01",
+                "company_ids": [company_id],
+                "character_ids": [char_id],
+            }
+        ),
+        encoding="utf-8",
+    )
+    character_dir = game_dir / "角色"
+    character_dir.mkdir(parents=True, exist_ok=True)
+    (character_dir / f"{char_name}.json").write_text(
+        json.dumps(
+            {
+                "id": char_id,
+                "name": char_name,
+                "display_name": char_name,
+                "cn_name": char_name,
+                "sex": "female",
+                "role": "main",
+                "company_ids": [company_id],
+                "image": {"url": "https://t.vndb.org/ch/1/1.jpg"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _prepare_company_test(monkeypatch, tmp_path, directory: str, company_id: str,
+                          vndb_name: str, char_id: str, char_name: str) -> None:
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(waifu.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(waifu_usage.config, "data_dir", str(data_dir))
+    monkeypatch.setattr(commands.config, "data_dir", str(data_dir))
+    library_root = tmp_path / "final_company_library"
+    _build_fake_company_library(
+        library_root, directory, company_id, vndb_name, char_id, char_name
+    )
+    monkeypatch.setattr(library.config, "library_dir", str(library_root))
+    library.reset_cache()
+    commands._fixed_company_ids_cache.clear()
+    commands._yuzusoft_ids_cache = None
+    commands.collection_book._company_id_cache.clear()
+
+
+async def test_keywaifu_draws_local_key_card(monkeypatch, tmp_path) -> None:
+    """/keywaifu 从本地库固定抽 Key 角色，且不参与 LRU。"""
+    _prepare_company_test(
+        monkeypatch, tmp_path, "Key", "p24", "Key", "c100", "Key酱"
+    )
+
+    async def fake_render(character):
+        return b"JPEG-KEY"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(
+        commands._cmd_waifu(matcher, _FakeEvent(123), "", source="key")
+    )
+
+    record = waifu.get_today_waifu(123)
+    assert record is not None
+    assert record["source"] == "key"
+    assert record["character_id"] == "c100"
+    assert record["library_path"].endswith("Key酱.json")
+    assert waifu_usage.last_used("c100") is None
+    assert "base64://" in str(matcher.sent[-1])
+
+
+async def test_company_entries_share_daily_quota(monkeypatch, tmp_path) -> None:
+    """会社专属入口共享每日额度，重复时提示实际抽过的入口。"""
+    _prepare_company_test(
+        monkeypatch, tmp_path, "Key", "p24", "Key", "c100", "Key酱"
+    )
+
+    async def fake_render(character):
+        return b"JPEG-KEY"
+
+    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
+    matcher = _FakeMatcher()
+    await _run(
+        commands._cmd_waifu(matcher, _FakeEvent(123), "", source="key")
+    )
+    await _run(
+        commands._cmd_waifu(matcher, _FakeEvent(123), "", source="saga")
+    )
+
+    record = waifu.get_today_waifu(123)
+    assert record is not None and record["source"] == "key"
+    assert "已经抽过 /keywaifu" in str(matcher.sent[-1])
+    assert "Key老婆" in str(matcher.sent[-1])
+
+
+async def test_company_collection_filters_by_company(monkeypatch, tmp_path) -> None:
+    """会社入口的 collection 只展示对应会社角色。"""
+    data_dir = tmp_path / "data"
+    for module in (waifu, commands, commands.collection_book, collection):
+        monkeypatch.setattr(module.config, "data_dir", str(data_dir))
+    commands.collection_book._loaded = False
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c-key", name="Key酱", original="Key酱"),
+        source="key",
+        role="primary",
+    )
+    waifu.save_waifu(
+        111,
+        VNDBCharacter(id="c-norm", name="常规乙", original="常规乙"),
+        source="waifu",
+        role="main",
+    )
+
+    matcher = _FakeMatcher()
+    await _run(
+        commands._handle_yuzu_trade(
+            matcher, _FakeEvent(111), "collection", "", source="key"
+        )
+    )
+    text = str(matcher.sent[-1])
+    assert "Key酱" in text
+    assert "常规乙" not in text
+
+    matcher2 = _FakeMatcher()
+    await _run(
+        commands._cmd_waifu(
+            matcher2, _FakeEvent(111), "collection key", source="waifu"
+        )
+    )
+    text2 = str(matcher2.sent[-1])
+    assert "Key酱" in text2
+    assert "常规乙" not in text2

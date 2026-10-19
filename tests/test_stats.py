@@ -110,3 +110,19 @@ def test_week_top_text_yuzu_label(tmp_path, monkeypatch) -> None:
     text = stats.week_top_text(days=7, limit=10, source="yuzu")
     assert "柚子社" in text
     assert "あおい" in text
+
+def test_week_top_source_filter_fixed_company(tmp_path, monkeypatch) -> None:
+    """Key/SAGA/Purple 等固定会社入口可按来源过滤并显示会社名。"""
+    monkeypatch.setattr(stats.config, "data_dir", str(tmp_path))
+    monkeypatch.setattr(stats.waifu.config, "data_dir", str(tmp_path))
+    stats._history_loaded = False
+
+    stats.record_draw("c-key", "Key酱", source="key")
+    stats.record_draw("c-waifu", "普通酱", source="waifu")
+
+    top = stats.week_top(days=7, limit=10, source="key")
+    assert [row["character_id"] for row in top] == ["c-key"]
+    text = stats.week_top_text(days=7, limit=10, source="key")
+    assert "Key" in text
+    assert "Key酱" in text
+    assert "普通酱" not in text

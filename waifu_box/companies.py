@@ -133,7 +133,39 @@ COMPANIES: dict[str, dict[str, object]] = {
 }
 
 
-# 普通 waifu 的全局默认池：与 /yuzuwaifu 无关
+# 固定会社专属抽卡入口：source -> 会社 key
+# /yuzuwaifu、/keywaifu、/sagawaifu、/purplewaifu 均固定从对应会社抽卡
+FIXED_WAIFU_COMPANIES = {
+    "yuzu": "yuzusoft",
+    "key": "key",
+    "saga": "sagaplanets",
+    "purple": "purplesoftware",
+}
+
+# 固定会社入口的展示名/命令/图鉴标签
+FIXED_WAIFU_LABELS = {
+    "yuzu": "柚子社",
+    "key": "Key",
+    "saga": "SAGA PLANETS",
+    "purple": "Purple software",
+}
+
+FIXED_WAIFU_COMMANDS = {
+    "yuzu": "/yuzuwaifu",
+    "key": "/keywaifu",
+    "saga": "/sagawaifu",
+    "purple": "/purplewaifu",
+}
+
+FIXED_WAIFU_TAGS = {
+    "yuzu": "柚",
+    "key": "键",
+    "saga": "SAGA",
+    "purple": "紫",
+}
+
+
+# 普通 waifu 的全局默认池：与固定会社入口无关
 WAIFU_POOL_KEYS = (
     "yuzusoft",
     "key",

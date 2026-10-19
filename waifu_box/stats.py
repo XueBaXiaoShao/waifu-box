@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import config
-from . import waifu
+from . import companies, waifu
 
 _lock = threading.Lock()
 _history_loaded = False
@@ -136,7 +136,7 @@ def _ensure_loaded() -> None:
         if ts > entry["last_seen"]:
             entry["last_seen"] = ts
 
-    # 2) waifu_state.json：补全角色名与日期（含 yuzu 记录；不重复计数）
+    # 2) waifu_state.json：补全角色名与日期（含固定会社入口记录；不重复计数）
     state_seen: set[str] = set()
     for uid, record in waifu._load().get("users", {}).items():
         if not isinstance(record, dict):
@@ -163,9 +163,9 @@ def _ensure_loaded() -> None:
             entry["sort_key"] = _kana_sort_key(name)
         src = str(record.get("source") or "waifu")
         sources = entry.setdefault("sources", {})
-        # 仅当角色不在 usage（遗漏的 yuzu 等）时补一次计数；
-        # yuzu 记录即使在 usage 中也补 yuzu source（yuzu 是独立抽卡入口）
-        if cid not in usage or src == "yuzu":
+        # 仅当角色不在 usage（遗漏的固定会社记录等）时补一次计数；
+        # 固定会社记录即使在 usage 中也补 source（独立抽卡入口）
+        if cid not in usage or src in companies.FIXED_WAIFU_COMPANIES:
             entry["count"] += 1
             sources[src] = int(sources.get(src, 0)) + 1
         state_seen.add(cid)
@@ -224,7 +224,7 @@ def week_top(
 ) -> list[dict[str, Any]]:
     """返回最近 days 天内被抽次数最多的角色列表（含名称/次数/最后抽到时间）。
 
-    source 为 "yuzu" 时只统计柚子社记录；None 统计全部。
+    source 为固定会社入口（yuzu/key/saga/purple）时只统计对应来源；None 统计全部。
     排序：次数降序；次数相同按五十音序（假名读法）升序。
     """
     with _lock:
@@ -292,13 +292,13 @@ def _parse_dt(value: str) -> datetime | None:
 
 
 def week_top_text(days: int = 7, limit: int = 10, source: str | None = None) -> str:
-    """生成可读的排名文本（source="yuzu" 时统计柚子社）。"""
+    """生成可读的排名文本（source 为固定会社入口时统计该会社）。"""
     rows = week_top(days=days, limit=limit, source=source)
+    label = companies.FIXED_WAIFU_LABELS.get(source or "", "")
     if not rows:
-        label = "柚子社" if source == "yuzu" else ""
         return f"最近 {days} 天还没有{label}抽卡记录"
-    label = "【柚子社" if source == "yuzu" else "【"
-    lines = [f"{label}最近 {days} 天角色抽取排行榜】"]
+    header = f"【{label}最近 {days} 天角色抽取排行榜】" if label else f"【最近 {days} 天角色抽取排行榜】"
+    lines = [header]
     for index, row in enumerate(rows, start=1):
         lines.append(
             f"{index}. {row['name']}（{row['count']} 次）"

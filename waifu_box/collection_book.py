@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import waifu
+from . import companies, waifu
 from .config import config
 
 _lock = threading.RLock()
@@ -172,19 +172,24 @@ def search_collection(
     user_id: int,
     keyword: str,
     only_yuzu: bool = False,
+    company_source: str | None = None,
 ) -> list[dict[str, Any]]:
     """在图鉴中检索角色。
 
     支持：角色名/原名/中文名/罗马音/作品名模糊匹配；纯数字时按
-    图鉴列表顺序（柚子在前）取序号（1 起）。only_yuzu=True 时只搜柚子社。
+    图鉴列表顺序（固定会社在前）取序号（1 起）。only_yuzu=True 时只搜
+    柚子社；company_source 指定固定会社入口（yuzu/key/saga/purple）。
     """
     keyword = (keyword or "").strip()
     if not keyword:
         return []
+    filter_source = "yuzu" if only_yuzu else company_source
     if keyword.isdigit():
         ordered = list(_ordered_rows(user_collection(user_id)))
-        if only_yuzu:
-            ordered = [r for r in ordered if _is_yuzu_entry(r)]
+        if filter_source:
+            ordered = [
+                r for r in ordered if _entry_matches_source(r, filter_source)
+            ]
         index = int(keyword) - 1
         if 0 <= index < len(ordered):
             return [ordered[index]]
@@ -192,7 +197,7 @@ def search_collection(
     lower = keyword.lower()
     matches: list[dict[str, Any]] = []
     for entry in user_collection(user_id).values():
-        if only_yuzu and not _is_yuzu_entry(entry):
+        if filter_source and not _entry_matches_source(entry, filter_source):
             continue
         name = str(entry.get("name") or entry.get("original") or "").lower()
         original = str(entry.get("original") or "").lower()
@@ -221,18 +226,19 @@ def search_collection(
 
 
 def _ordered_rows(book: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """图鉴展示顺序：柚子在前，其余按收录时间倒序。"""
-    yuzus = [
-        r for r in book.values()
-        if str(r.get("source") or "") == "yuzu"
-    ]
-    others = [
-        r for r in book.values()
-        if str(r.get("source") or "") != "yuzu"
-    ]
-    yuzus.sort(key=lambda r: str(r.get("first_seen") or ""), reverse=True)
-    others.sort(key=lambda r: str(r.get("first_seen") or ""), reverse=True)
-    return yuzus + others
+    """图鉴展示顺序：固定会社入口在前，其余按收录时间倒序。"""
+    order = {
+        source: index
+        for index, source in enumerate(companies.FIXED_WAIFU_COMPANIES)
+    }
+    rows = list(book.values())
+    rows.sort(key=lambda r: str(r.get("first_seen") or ""), reverse=True)
+    rows.sort(
+        key=lambda r: order.get(
+            str(r.get("source") or ""), len(order)
+        )
+    )
+    return rows
 
 
 def collection_size(user_id: int) -> int:
@@ -240,35 +246,82 @@ def collection_size(user_id: int) -> int:
     return len(user_collection(user_id))
 
 
-YUZU_COMPANY_IDS = ("p98", "p12215")
+_company_id_cache: dict[str, set[str]] = {}
+
+
+def _company_ids_for_source(source: str) -> set[str]:
+    """固定会社入口对应的本地库厂商 ID 集合。"""
+    company_key = companies.FIXED_WAIFU_COMPANIES.get(source)
+    if not company_key:
+        return set()
+    cached = _company_id_cache.get(company_key)
+    if cached is not None:
+        return cached
+    from . import library
+
+    ids: set[str] = set()
+    if library.ensure_index():
+        search_names = [
+            str(name)
+            for name in companies.COMPANIES[company_key]["search"]
+        ]
+        ids = set(library.resolve_company_ids(search_names))
+    if not ids and company_key == "yuzusoft":
+        ids = {"p98", "p12215"}
+    if ids:
+        _company_id_cache[company_key] = ids
+    return ids
+
+
+def _entry_matches_source(entry: dict[str, Any], source: str) -> bool:
+    """图鉴条目是否属于某个固定会社入口。
+
+    优先按本地库 company_ids 判断（/waifu 抽到的同会社角色也算），
+    本地库缺失时回退按抽卡来源判断。
+    """
+    if str(entry.get("source") or "") == source:
+        return True
+    company_ids = _company_ids_for_source(source)
+    if not company_ids or not entry.get("library_path"):
+        return False
+    path = Path(config.library_dir) / str(entry["library_path"])
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    ids = {str(item) for item in data.get("company_ids") or []}
+    return bool(ids & company_ids)
 
 
 def _is_yuzu_entry(entry: dict[str, Any]) -> bool:
     """图鉴条目是否柚子社角色：优先按本地库会社判断，回退按入口。"""
-    if entry.get("library_path"):
-        path = Path(config.library_dir) / str(entry["library_path"])
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            company_ids = {str(item) for item in data.get("company_ids") or []}
-            if company_ids & set(YUZU_COMPANY_IDS):
-                return True
-        except (OSError, json.JSONDecodeError):
-            pass
-    return str(entry.get("source") or "") == "yuzu"
+    return _entry_matches_source(entry, "yuzu")
 
 
-def yuzu_progress(user_id: int) -> tuple[int, int] | None:
-    """柚子社收集进度 (已收集, 本地库总数)；库未索引返回 None。"""
+def company_progress(
+    user_id: int, source: str
+) -> tuple[int, int] | None:
+    """固定会社收集进度 (已收集, 本地库总数)；库未索引返回 None。"""
     from . import library
 
     if not library.ensure_index():
         return None
-    total = library.count_characters(company_ids=list(YUZU_COMPANY_IDS))
+    company_ids = _company_ids_for_source(source)
+    if not company_ids:
+        return None
+    total = library.count_characters(company_ids=list(company_ids))
     if total <= 0:
         return None
     book = user_collection(user_id)
-    collected = sum(1 for r in book.values() if _is_yuzu_entry(r))
+    collected = sum(
+        1 for record in book.values() if _entry_matches_source(record, source)
+    )
     return collected, total
+
+
+def yuzu_progress(user_id: int) -> tuple[int, int] | None:
+    """柚子社收集进度 (已收集, 本地库总数)；库未索引返回 None。"""
+    return company_progress(user_id, "yuzu")
 
 
 def usage_text() -> str:
@@ -277,6 +330,9 @@ def usage_text() -> str:
         "【图鉴用法】\n"
         "- /waifu collection —— 查看我的图鉴列表（带序号）\n"
         "- /waifu collection yuzu —— 只看柚子社角色\n"
+        "- /keywaifu collection —— 只看 Key 角色\n"
+        "- /sagawaifu collection —— 只看 SAGA PLANETS 角色\n"
+        "- /purplewaifu collection —— 只看 Purple software 角色\n"
         "- /waifu collection <序号> —— 按列表序号查看角色卡片\n"
         "- /waifu collection <名字> —— 按名字检索（支持日文名/中文名/罗马音/作品名）\n"
         "- 抽到过的角色自动收录，重复抽到不会重复计入"
@@ -365,31 +421,58 @@ def _rarity_of_entry(entry: dict[str, Any]) -> str:
 def collection_text(
     user_id: int,
     only_yuzu: bool = False,
+    company_source: str | None = None,
 ) -> str:
-    """图鉴展示文本；only_yuzu=True 时只列柚子社角色。"""
+    """图鉴展示文本；only_yuzu/company_source 用于只看固定会社。"""
     book = user_collection(user_id)
+    filter_source = "yuzu" if only_yuzu else company_source
     if not book:
-        return "图鉴还是空的，快用 /waifu 或 /yuzuwaifu 抽卡吧\n" + usage_text()
+        return "图鉴还是空的，快用 /waifu、/yuzuwaifu 或会社专属入口抽卡吧\n" + usage_text()
     rows: list[dict[str, Any]] = []
-    yuzu_count = 0
+    counts = {source: 0 for source in companies.FIXED_WAIFU_COMPANIES}
     normal_count = 0
-    for cid, entry in book.items():
+    for entry in book.values():
         src = str(entry.get("source") or "waifu")
-        if src == "yuzu":
-            yuzu_count += 1
+        if src in counts:
+            counts[src] += 1
         else:
             normal_count += 1
-        if only_yuzu and src != "yuzu":
+        if filter_source and not _entry_matches_source(entry, filter_source):
             continue
         rows.append(entry)
     if not rows:
-        return "还没有柚子社角色入库"
-    # 按 source 分组：yuzu 在前，其次按首次收录时间倒序
+        if filter_source:
+            label = companies.FIXED_WAIFU_LABELS.get(filter_source, "该会社")
+            return f"还没有{label}角色入库"
+        return "图鉴还是空的"
+    # 固定会社入口在前，其余按首次收录时间倒序
     rows = _ordered_rows({str(r.get("character_id") or ""): r for r in rows})
-    header = f"【我的角色图鉴】共 {len(book)} 位（柚子 {yuzu_count} / 常规 {normal_count}）"
-    progress = yuzu_progress(user_id)
-    if progress is not None:
-        header += f"\n柚子社收藏进度：{progress[0]}/{progress[1]}"
+    if filter_source:
+        label = companies.FIXED_WAIFU_LABELS.get(filter_source, "会社")
+        header = f"【{label}图鉴】共 {len(rows)} 位"
+        progress = company_progress(user_id, filter_source)
+        if progress is not None:
+            header += f"\n{label}收藏进度：{progress[0]}/{progress[1]}"
+    else:
+        short_labels = {
+            "yuzu": "柚子",
+            "key": "Key",
+            "saga": "SAGA",
+            "purple": "Purple",
+        }
+        parts = [
+            f"{short_labels[source]} {counts[source]}"
+            for source in companies.FIXED_WAIFU_COMPANIES
+        ]
+        parts.append(f"常规 {normal_count}")
+        header = (
+            f"【我的角色图鉴】共 {len(book)} 位（"
+            + " / ".join(parts)
+            + "）"
+        )
+        progress = yuzu_progress(user_id)
+        if progress is not None:
+            header += f"\n柚子社收藏进度：{progress[0]}/{progress[1]}"
     lines = [header]
     for index, entry in enumerate(rows[:40], start=1):
         name = str(entry.get("name") or entry.get("original") or entry.get("character_id"))
@@ -398,7 +481,8 @@ def collection_text(
             name = f"{cn_name}（{name}）"
         vns = entry.get("vns") or []
         game = vns[0].get("title") if vns and vns[0].get("title") else ""
-        tag = "柚" if str(entry.get("source") or "") == "yuzu" else "常"
+        src = str(entry.get("source") or "")
+        tag = companies.FIXED_WAIFU_TAGS.get(src, "常")
         rarity = _rarity_of_entry(entry)
         line = f"{index}. [{tag}][{rarity}] {name}"
         if game:
