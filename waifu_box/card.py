@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import html
+import re
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -21,8 +23,6 @@ BOTTOM_RESERVE = 130
 
 _FONT_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
 _FONT_FILE = _FONT_DIR / "YWSongTi-Bold.ttf"
-
-
 def _font(size: int) -> ImageFont.FreeTypeFont:
     if _FONT_FILE.is_file():
         return ImageFont.truetype(str(_FONT_FILE), size=size)
@@ -47,22 +47,38 @@ def _wrap_text(
     font: ImageFont.FreeTypeFont,
     max_width: int,
 ) -> list[str]:
-    """按像素宽度逐字换行，兼容中日韩混排。"""
+    """按像素宽度换行：英文优先按单词，中日韩/超长词按字符。"""
     lines: list[str] = []
-    current = ""
-    for char in text:
-        if char == "\n":
-            lines.append(current)
-            current = ""
+    for paragraph in str(text or "").split("\n"):
+        if not paragraph:
+            lines.append("")
             continue
-        candidate = current + char
-        if draw.textlength(candidate, font=font) <= max_width:
-            current = candidate
-        else:
-            lines.append(current)
-            current = char
-    if current:
-        lines.append(current)
+        current = ""
+        for token in re.findall(r"\S+|\s+", paragraph):
+            if token.isspace():
+                if current:
+                    current += " "
+                continue
+            candidate = current + token
+            if draw.textlength(candidate, font=font) <= max_width:
+                current = candidate
+                continue
+            if current.strip():
+                lines.append(current.rstrip())
+            current = ""
+            if draw.textlength(token, font=font) <= max_width:
+                current = token
+                continue
+            for char in token:
+                candidate = current + char
+                if draw.textlength(candidate, font=font) <= max_width:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = char
+        if current.strip():
+            lines.append(current.rstrip())
     return lines
 
 
@@ -209,11 +225,76 @@ def _paste_logo(canvas: Image.Image, company_ids: list[str] | None) -> None:
     canvas.paste(logo, (x, y), logo)
 
 
+_VNDB_TAG_RE = re.compile(
+    r"\[/?(?:url|img|spoiler|b|i|u|s|code|quote|center|right|left|"
+    r"justify|color|size|font)(?:=[^\]]*)?\]",
+    re.IGNORECASE,
+)
+
+
+def clean_description(text: str) -> str:
+    """清理 VNDB BBCode/HTML 实体，避免简介在卡片里显示成乱码。"""
+    value = str(text or "")
+    if not value:
+        return ""
+    value = re.sub(
+        r"\[url=[^\]]*\](.*?)\[/url\]",
+        r"\1",
+        value,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    value = re.sub(
+        r"\[url\](.*?)\[/url\]",
+        r"\1",
+        value,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    value = re.sub(
+        r"\[img[^\]]*\].*?\[/img\]",
+        "",
+        value,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    value = re.sub(
+        r"\[spoiler\](.*?)\[/spoiler\]",
+        r"\1",
+        value,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    value = _VNDB_TAG_RE.sub("", value)
+    value = html.unescape(value)
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = re.sub(r"[ \t]+\n", "\n", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    return value.strip()
+
+
+def _title_key(value: str) -> str:
+    """标题去重用的规范化：忽略大小写、空格与标点。"""
+    return "".join(
+        char for char in str(value or "").casefold() if char.isalnum()
+    )
+
+
+def _display_game_title(game: Any) -> str:
+    """作品名；中文名与原名仅大小写/标点不同时不重复追加。"""
+    title = str(
+        getattr(game, "title", "")
+        or getattr(game, "jp_title", "")
+        or ""
+    )
+    cn_title = str(getattr(game, "cn_title", "") or "")
+    if cn_title and _title_key(cn_title) != _title_key(title):
+        return f"{title}（{cn_title}）"
+    return title
+
+
 def render_card(
     character: Any,
     image_bytes: bytes,
     *,
     company_name: str = "",
+    header: str = "今日老婆",
 ) -> bytes:
     """渲染角色信息卡，返回 JPEG 字节。"""
     canvas = Image.new("RGB", (CARD_WIDTH, CARD_HEIGHT), "#f7f5f2")
@@ -240,7 +321,7 @@ def render_card(
 
     x = RIGHT_LEFT
     y = 26
-    draw.text((x, y), "今日老婆", font=_font(24), fill=accent)
+    draw.text((x, y), header, font=_font(24), fill=accent)
     y += 36
 
     name = character.name or "未知角色"
@@ -255,9 +336,7 @@ def render_card(
     y += 8
 
     game = character.game
-    game_title = game.title or game.jp_title
-    if game.cn_title and game.cn_title != game_title:
-        game_title = f"{game_title}（{game.cn_title}）"
+    game_title = _display_game_title(game)
     info_rows = [
         ("作品", game_title),
         ("会社", company_name),
@@ -294,11 +373,11 @@ def render_card(
         )
 
     y += 8
-    intro = (
+    intro = clean_description(
         character.cn_description
         or character.description
         or str(character.data.get("jp_description") or "")
-    ).strip()
+    )
     if not intro:
         tags = character.data.get("tags") or []
         tag_names = [str(tag.get("name")) for tag in tags if tag.get("name")]
@@ -340,7 +419,9 @@ def render_card(
     return buffer.getvalue()
 
 
-async def render_character_card(character: Any) -> bytes | None:
+async def render_character_card(
+    character: Any, *, header: str = "今日老婆"
+) -> bytes | None:
     """下载角色立绘并渲染卡片；失败返回 None。"""
     if not character.image_url:
         return None
@@ -354,7 +435,12 @@ async def render_character_card(character: Any) -> bytes | None:
         return None
     company_name = "、".join(logos.company_names(character.company_ids))
     try:
-        return render_card(character, image_bytes, company_name=company_name)
+        return render_card(
+            character,
+            image_bytes,
+            company_name=company_name,
+            header=header,
+        )
     except Exception:
         return None
 

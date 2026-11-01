@@ -24,6 +24,22 @@ _loaded = False
 # {str(user_id): {str(character_id): record}}
 _collections: dict[str, dict[str, dict[str, Any]]] = {}
 
+# 搜索/分页用的用户级内存索引；收藏变更时整体失效
+_index_cache: dict[str, dict[str, Any]] = {}
+# 会社角色总数缓存，key 为 (library_dir, library_mtime_ns, company_key)
+_company_total_cache: dict[tuple[str, int, str], int] = {}
+# 轻量会社索引：只读各会社 公司索引.json，避免加载全量游戏索引
+_light_company_index_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
+_light_company_ids_cache: dict[tuple[str, int, str], list[str]] = {}
+
+
+def _invalidate_index(user_id: int | str | None = None) -> None:
+    """收藏数据变更后清空搜索索引；指定用户时只清该用户。"""
+    if user_id is None:
+        _index_cache.clear()
+    else:
+        _index_cache.pop(str(user_id), None)
+
 
 def _book_file() -> Path:
     return Path(config.data_dir) / "waifu_collection.json"
@@ -60,6 +76,7 @@ def _ensure_loaded() -> None:
     if _loaded:
         return
     _collections = _load_persisted()
+    _invalidate_index()
     # 把 waifu_state.json 中现存的记录导入图鉴（历史兼容，幂等）
     for uid, record in waifu._load().get("users", {}).items():
         if not isinstance(record, dict):
@@ -71,6 +88,22 @@ def _ensure_loaded() -> None:
         if cid not in user:
             user[cid] = _entry_from_record(record, first_seen=str(record.get("date") or ""))
     _loaded = True
+
+
+def _company_ids_from_path(relative_path: str) -> list[str]:
+    """从本地资料库相对路径读取 company_ids（不依赖全量索引）。"""
+    if not relative_path:
+        return []
+    path = Path(config.library_dir) / relative_path
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [
+        str(item)
+        for item in (data.get("company_ids") or [])
+        if str(item).strip()
+    ]
 
 
 def _entry_from_record(record: dict[str, Any], first_seen: str = "") -> dict[str, Any]:
@@ -94,8 +127,17 @@ def _entry_from_record(record: dict[str, Any], first_seen: str = "") -> dict[str
         "cn_name": str(record.get("cn_name") or ""),
         "roman": str(record.get("roman") or ""),
     }
+    company_ids = record.get("company_ids")
+    if isinstance(company_ids, list) and company_ids:
+        entry["company_ids"] = [
+            str(item) for item in company_ids if str(item).strip()
+        ]
     if record.get("library_path"):
         entry["library_path"] = str(record["library_path"])
+        if not entry.get("company_ids"):
+            ids = _company_ids_from_path(str(record["library_path"]))
+            if ids:
+                entry["company_ids"] = ids
     return entry
 
 
@@ -114,6 +156,7 @@ def rec_collect(user_id: int, record: dict[str, Any]) -> bool:
             first_seen=datetime.now().isoformat(timespec="seconds"),
         )
         _save_persisted()
+        _invalidate_index(user_id)
         return True
 
 
@@ -129,6 +172,7 @@ def rec_collect_id(
     image_url: str = "",
     cn_name: str = "",
     roman: str = "",
+    company_ids: list[str] | None = None,
 ) -> bool:
     """按字段收录（抽卡命令的轻量入口）；返回是否为新角色。"""
     cid = str(character_id or "").strip()
@@ -147,6 +191,10 @@ def rec_collect_id(
     }
     if library_path:
         record["library_path"] = library_path
+    if company_ids:
+        record["company_ids"] = [
+            str(item) for item in company_ids if str(item).strip()
+        ]
     return rec_collect(user_id, record)
 
 
@@ -184,36 +232,23 @@ def search_collection(
     if not keyword:
         return []
     filter_source = "yuzu" if only_yuzu else company_source
+    index = _user_index(user_id)
+    rows = (
+        index["by_source"].get(filter_source, index["rows"])
+        if filter_source
+        else index["rows"]
+    )
     if keyword.isdigit():
-        ordered = list(_ordered_rows(user_collection(user_id)))
-        if filter_source:
-            ordered = [
-                r for r in ordered if _entry_matches_source(r, filter_source)
-            ]
-        index = int(keyword) - 1
-        if 0 <= index < len(ordered):
-            return [ordered[index]]
+        position = int(keyword) - 1
+        if 0 <= position < len(rows):
+            return [rows[position]]
         return []
     lower = keyword.lower()
+    blobs = index["blobs"]
     matches: list[dict[str, Any]] = []
-    for entry in user_collection(user_id).values():
-        if filter_source and not _entry_matches_source(entry, filter_source):
-            continue
-        name = str(entry.get("name") or entry.get("original") or "").lower()
-        original = str(entry.get("original") or "").lower()
-        cn_name = str(entry.get("cn_name") or "").lower()
-        roman = str(entry.get("roman") or "").lower()
-        vns = entry.get("vns") or []
-        game_titles = " ".join(
-            str(vn.get("title") or "") for vn in vns if isinstance(vn, dict)
-        ).lower()
-        if (
-            lower in name
-            or lower in original
-            or lower in cn_name
-            or lower in roman
-            or lower in game_titles
-        ):
+    for entry in rows:
+        cid = str(entry.get("character_id") or "")
+        if lower in blobs.get(cid, ""):
             matches.append(entry)
     # 名字精确匹配优先，其次匹配长度
     matches.sort(
@@ -241,36 +276,292 @@ def _ordered_rows(book: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
+def _search_blob(entry: dict[str, Any]) -> str:
+    """预生成搜索文本：名字/原名/中文名/罗马音/作品名。"""
+    parts = [
+        str(entry.get("name") or ""),
+        str(entry.get("original") or ""),
+        str(entry.get("cn_name") or ""),
+        str(entry.get("roman") or ""),
+    ]
+    for vn in entry.get("vns") or []:
+        if isinstance(vn, dict):
+            parts.append(str(vn.get("title") or ""))
+    return " ".join(part for part in parts if part).lower()
+
+
+def _build_user_index(user_id: int) -> dict[str, Any]:
+    """构建用户级搜索/分页索引（会社归属、全局序号、搜索文本）。"""
+    with _lock:
+        _ensure_loaded()
+        book = _collections.get(str(user_id), {})
+        rows = _ordered_rows(book)
+        entry_company_ids = {
+            str(cid): _entry_company_ids(entry)
+            for cid, entry in book.items()
+            if isinstance(entry, dict)
+        }
+        indices: dict[str, dict[str, int]] = {
+            "": {
+                str(entry.get("character_id") or ""): position
+                for position, entry in enumerate(rows, start=1)
+            }
+        }
+        by_source: dict[str, list[dict[str, Any]]] = {}
+        for source in companies.FIXED_WAIFU_COMPANIES:
+            company_ids = _company_ids_for_source(source)
+            source_rows = [
+                entry
+                for entry in rows
+                if str(entry.get("source") or "") == source
+                or (
+                    company_ids
+                    and entry_company_ids.get(
+                        str(entry.get("character_id") or ""), set()
+                    )
+                    & company_ids
+                )
+            ]
+            by_source[source] = source_rows
+            indices[source] = {
+                str(entry.get("character_id") or ""): position
+                for position, entry in enumerate(source_rows, start=1)
+            }
+        counts = {source: 0 for source in companies.FIXED_WAIFU_COMPANIES}
+        normal_count = 0
+        blobs: dict[str, str] = {}
+        for entry in rows:
+            src = str(entry.get("source") or "waifu")
+            if src in counts:
+                counts[src] += 1
+            else:
+                normal_count += 1
+            blobs[str(entry.get("character_id") or "")] = _search_blob(entry)
+        index = {
+            "rows": rows,
+            "by_source": by_source,
+            "indices": indices,
+            "blobs": blobs,
+            "counts": counts,
+            "normal_count": normal_count,
+            "size": len(rows),
+        }
+        _index_cache[str(user_id)] = index
+        return index
+
+
+def _user_index(user_id: int) -> dict[str, Any]:
+    if not _loaded:
+        return _build_user_index(user_id)
+    cached = _index_cache.get(str(user_id))
+    if cached is not None:
+        return cached
+    return _build_user_index(user_id)
+
+
 def collection_size(user_id: int) -> int:
-    """图鉴收录的角色数。"""
-    return len(user_collection(user_id))
+    """图鉴收录的角色数（不构建搜索索引）。"""
+    with _lock:
+        _ensure_loaded()
+        return len(_collections.get(str(user_id), {}))
 
 
-_company_id_cache: dict[str, set[str]] = {}
+def collection_index(
+    user_id: int,
+    character_id: str,
+    company_source: str | None = None,
+) -> int | None:
+    """角色在（会社筛选后的）图鉴列表中的 1 起始序号（O(1)）。"""
+    index = _user_index(user_id)
+    table = index["indices"].get(
+        company_source or "", index["indices"][""]
+    )
+    return table.get(str(character_id or ""))
+
+
+_company_id_cache: dict[tuple[str, str], set[str]] = {}
+
+
+def _library_version() -> int:
+    try:
+        return Path(config.library_dir).stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
+def _load_light_company_indexes() -> list[dict[str, Any]]:
+    """只读各会社的 公司索引.json，用于快速解析固定会社 ID。"""
+    library_dir = str(Path(config.library_dir))
+    version = _library_version()
+    key = (library_dir, version)
+    cached = _light_company_index_cache.get(key)
+    if cached is not None:
+        return cached
+    for old_key in [
+        item for item in _light_company_index_cache if item[0] == library_dir and item != key
+    ]:
+        _light_company_index_cache.pop(old_key, None)
+    for old_key in [
+        item
+        for item in _light_company_ids_cache
+        if item[0] == library_dir and item[1] != version
+    ]:
+        _light_company_ids_cache.pop(old_key, None)
+    indexes: list[dict[str, Any]] = []
+    root = Path(config.library_dir)
+    try:
+        directories = sorted(root.iterdir())
+    except OSError:
+        directories = []
+    for company_dir in directories:
+        if not company_dir.is_dir():
+            continue
+        try:
+            payload = json.loads(
+                (company_dir / "公司索引.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict) and payload.get("id"):
+            indexes.append(payload)
+    _light_company_index_cache[key] = indexes
+    return indexes
+
+
+def _match_company_index(
+    payload: dict[str, Any], search_names: list[str]
+) -> bool:
+    candidates = [
+        str(payload.get(key) or "")
+        for key in ("vndb_name", "name", "original")
+    ]
+    lower_candidates = {value.lower() for value in candidates if value}
+    compact_candidates = {
+        value.replace(" ", "").replace("-", "").lower()
+        for value in lower_candidates
+    }
+    for search_name in search_names:
+        name = search_name.strip().lower()
+        if not name:
+            continue
+        compact_name = name.replace(" ", "").replace("-", "")
+        if (
+            name in lower_candidates
+            or compact_name in compact_candidates
+            or any(name in candidate for candidate in lower_candidates)
+            or any(candidate in name for candidate in lower_candidates)
+            or (
+                " " in name
+                and name.split(" ", 1)[0] in lower_candidates
+            )
+        ):
+            return True
+    return False
+
+
+def _company_ids_file() -> Path:
+    return Path(config.data_dir) / "waifu_company_ids.json"
+
+
+def _load_company_ids_cache() -> dict[str, Any]:
+    try:
+        payload = json.loads(_company_ids_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_company_ids_cache(
+    library_dir: str, version: int, ids: dict[str, list[str]]
+) -> None:
+    path = _company_ids_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "library_dir": library_dir,
+                "library_mtime_ns": version,
+                "ids": ids,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def _resolve_company_ids_light(company_key: str) -> list[str]:
+    library_dir = str(Path(config.library_dir))
+    version = _library_version()
+    cache_key = (library_dir, version, company_key)
+    cached = _light_company_ids_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    payload = _load_company_ids_cache()
+    if (
+        payload.get("library_dir") == library_dir
+        and payload.get("library_mtime_ns") == version
+        and isinstance(payload.get("ids"), dict)
+    ):
+        for key, values in payload["ids"].items():
+            if isinstance(values, list):
+                _light_company_ids_cache[
+                    (library_dir, version, str(key))
+                ] = [str(value) for value in values]
+        cached = _light_company_ids_cache.get(cache_key)
+        if cached is not None:
+            return cached
+    indexes = _load_light_company_indexes()
+    all_ids: dict[str, list[str]] = {}
+    for key in companies.FIXED_WAIFU_COMPANIES.values():
+        search_names = companies.fixed_search_names(key)
+        all_ids[key] = [
+            str(payload["id"])
+            for payload in indexes
+            if payload.get("id")
+            and _match_company_index(payload, search_names)
+        ]
+        _light_company_ids_cache[(library_dir, version, key)] = all_ids[key]
+    _save_company_ids_cache(library_dir, version, all_ids)
+    return all_ids.get(company_key, [])
 
 
 def _company_ids_for_source(source: str) -> set[str]:
-    """固定会社入口对应的本地库厂商 ID 集合。"""
+    """固定会社入口对应的本地库厂商 ID 集合（轻量索引优先）。"""
     company_key = companies.FIXED_WAIFU_COMPANIES.get(source)
     if not company_key:
         return set()
-    cached = _company_id_cache.get(company_key)
+    cache_key = (str(Path(config.library_dir)), company_key)
+    cached = _company_id_cache.get(cache_key)
     if cached is not None:
         return cached
-    from . import library
+    ids = set(_resolve_company_ids_light(company_key))
+    if not ids:
+        from . import library
 
-    ids: set[str] = set()
-    if library.ensure_index():
-        search_names = [
-            str(name)
-            for name in companies.COMPANIES[company_key]["search"]
-        ]
-        ids = set(library.resolve_company_ids(search_names))
+        if library.ensure_index():
+            search_names = companies.fixed_search_names(company_key)
+            ids = set(library.resolve_company_ids(search_names))
     if not ids and company_key == "yuzusoft":
         ids = {"p98", "p12215"}
     if ids:
-        _company_id_cache[company_key] = ids
+        _company_id_cache[cache_key] = ids
     return ids
+
+
+def _entry_company_ids(entry: dict[str, Any]) -> set[str]:
+    """图鉴条目的本地库会社 ID：优先用收录时保存的 company_ids。"""
+    raw = entry.get("company_ids")
+    if isinstance(raw, list) and raw:
+        return {str(item) for item in raw if str(item).strip()}
+    path = entry.get("library_path")
+    if not path:
+        return set()
+    return set(_company_ids_from_path(str(path)))
 
 
 def _entry_matches_source(entry: dict[str, Any], source: str) -> bool:
@@ -281,16 +572,9 @@ def _entry_matches_source(entry: dict[str, Any], source: str) -> bool:
     """
     if str(entry.get("source") or "") == source:
         return True
+    ids = _entry_company_ids(entry)
     company_ids = _company_ids_for_source(source)
-    if not company_ids or not entry.get("library_path"):
-        return False
-    path = Path(config.library_dir) / str(entry["library_path"])
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    ids = {str(item) for item in data.get("company_ids") or []}
-    return bool(ids & company_ids)
+    return bool(ids and company_ids and ids & company_ids)
 
 
 def _is_yuzu_entry(entry: dict[str, Any]) -> bool:
@@ -298,24 +582,90 @@ def _is_yuzu_entry(entry: dict[str, Any]) -> bool:
     return _entry_matches_source(entry, "yuzu")
 
 
+def _totals_file() -> Path:
+    return Path(config.data_dir) / "waifu_company_totals.json"
+
+
+def _load_totals_cache() -> dict[str, Any]:
+    try:
+        payload = json.loads(_totals_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_totals_cache(
+    library_dir: str, version: int, totals: dict[str, int]
+) -> None:
+    path = _totals_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "library_dir": library_dir,
+                "library_mtime_ns": version,
+                "totals": totals,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def _company_total(source: str) -> int:
+    """会社本地库角色总数（进程内 + 持久化缓存）。"""
+    company_key = companies.FIXED_WAIFU_COMPANIES.get(source)
+    if not company_key:
+        return 0
+    library_dir = str(Path(config.library_dir))
+    version = _library_version()
+    cache_key = (library_dir, version, company_key)
+    cached = _company_total_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    payload = _load_totals_cache()
+    if (
+        payload.get("library_dir") == library_dir
+        and payload.get("library_mtime_ns") == version
+        and isinstance(payload.get("totals"), dict)
+    ):
+        for key, value in payload["totals"].items():
+            if isinstance(value, int):
+                _company_total_cache[(library_dir, version, str(key))] = value
+        cached = _company_total_cache.get(cache_key)
+        if cached is not None:
+            return cached
+    from . import library
+
+    if not library.ensure_index():
+        return 0
+    totals: dict[str, int] = {}
+    for source_key, key in companies.FIXED_WAIFU_COMPANIES.items():
+        company_ids = _company_ids_for_source(source_key)
+        totals[key] = (
+            library.count_characters(company_ids=list(company_ids))
+            if company_ids
+            else 0
+        )
+        _company_total_cache[(library_dir, version, key)] = totals[key]
+    _save_totals_cache(library_dir, version, totals)
+    return totals.get(company_key, 0)
+
+
 def company_progress(
     user_id: int, source: str
 ) -> tuple[int, int] | None:
     """固定会社收集进度 (已收集, 本地库总数)；库未索引返回 None。"""
-    from . import library
-
-    if not library.ensure_index():
-        return None
-    company_ids = _company_ids_for_source(source)
-    if not company_ids:
-        return None
-    total = library.count_characters(company_ids=list(company_ids))
+    total = _company_total(source)
     if total <= 0:
         return None
-    book = user_collection(user_id)
-    collected = sum(
-        1 for record in book.values() if _entry_matches_source(record, source)
-    )
+    index = _user_index(user_id)
+    collected = len(index["by_source"].get(source, []))
     return collected, total
 
 
@@ -328,11 +678,18 @@ def usage_text() -> str:
     """图鉴检视用法说明。"""
     return (
         "【图鉴用法】\n"
-        "- /waifu collection —— 查看我的图鉴列表（带序号）\n"
+        "- /waifu collection —— 查看我的图鉴列表（带序号，每页 8 个）\n"
+        "- /waifu collection page 2 —— 翻到第 2 页\n"
+        "- /waifu collection search <关键词> —— 搜索图鉴中的角色"
+        "（名字/中文名/罗马音/作品名）\n"
         "- /waifu collection yuzu —— 只看柚子社角色\n"
-        "- /keywaifu collection —— 只看 Key 角色\n"
+        "- /keywaifu collection page 2 —— Key 图鉴第 2 页\n"
         "- /sagawaifu collection —— 只看 SAGA PLANETS 角色\n"
         "- /purplewaifu collection —— 只看 Purple software 角色\n"
+        "- /makurawaifu collection —— 只看 Makura 角色\n"
+        "- /augustwaifu collection —— 只看 August 角色\n"
+        "- /nitroplus collection —— 只看 Nitroplus 角色\n"
+        "- /qruppowaifu collection —— 只看 Qruppo 角色\n"
         "- /waifu collection <序号> —— 按列表序号查看角色卡片\n"
         "- /waifu collection <名字> —— 按名字检索（支持日文名/中文名/罗马音/作品名）\n"
         "- 抽到过的角色自动收录，重复抽到不会重复计入"
@@ -340,16 +697,13 @@ def usage_text() -> str:
 
 
 def enrich_from_library(user_id: int) -> int:
-    """从本地资料库补全图鉴条目的中文名/罗马音/定位；返回补全数。
+    """从本地资料库补全图鉴条目的中文名/罗马音/定位/会社 ID；返回补全数。
 
-    旧图鉴数据（或收录时本地库未索引的角色）可能在收藏后才有
-    cn_name/roman/role，调用方在检视前跑一次即可。
-    role 用于稀有度展示（primary→SSR 等），缺失会被判为默认稀有度。
+    有 library_path 的条目直接读取角色 JSON，不依赖全量索引；旧条目补全后
+    会把 company_ids 持久化，后续搜索/会社筛选不再读文件。
     """
     from . import library
 
-    if not library.ensure_index():
-        return 0
     updated = 0
     with _lock:
         _ensure_loaded()
@@ -367,14 +721,34 @@ def enrich_from_library(user_id: int) -> int:
                 need = True
             if not str(entry.get("role") or "").strip():
                 need = True
+            if entry.get("library_path") and not entry.get("company_ids"):
+                need = True
             if not need:
                 continue
-            character = library.get_character_by_id(cid)
-            if character is None:
+            data: dict[str, Any] | None = None
+            if entry.get("library_path"):
+                path = Path(config.library_dir) / str(entry["library_path"])
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    payload = None
+                if isinstance(payload, dict):
+                    data = payload
+            if data is None:
+                character = library.get_character_by_id(cid)
+                if character is not None:
+                    data = character.data or {}
+            if not isinstance(data, dict):
                 continue
-            cn = str(getattr(character, "cn_name", "") or "").strip()
-            roman = str((character.data or {}).get("vndb_name") or "").strip()
-            role = str((character.data or {}).get("role") or "").strip()
+            cn = str(data.get("cn_name") or "").strip()
+            roman = str(data.get("vndb_name") or "").strip()
+            role = str(data.get("role") or "").strip()
+            raw_company_ids = data.get("company_ids")
+            company_ids = (
+                [str(item) for item in raw_company_ids if str(item).strip()]
+                if isinstance(raw_company_ids, list)
+                else []
+            )
             changed = False
             if cn and not str(entry.get("cn_name") or "").strip():
                 entry["cn_name"] = cn
@@ -385,10 +759,14 @@ def enrich_from_library(user_id: int) -> int:
             if role and not str(entry.get("role") or "").strip():
                 entry["role"] = role
                 changed = True
+            if company_ids and not entry.get("company_ids"):
+                entry["company_ids"] = company_ids
+                changed = True
             if changed:
                 updated += 1
         if updated:
             _save_persisted()
+            _invalidate_index(user_id)
         return updated
 
 
@@ -422,34 +800,38 @@ def collection_text(
     user_id: int,
     only_yuzu: bool = False,
     company_source: str | None = None,
+    page: int = 1,
+    page_size: int = 8,
+    command: str = "/waifu collection",
 ) -> str:
-    """图鉴展示文本；only_yuzu/company_source 用于只看固定会社。"""
-    book = user_collection(user_id)
+    """图鉴展示文本；only_yuzu/company_source 用于只看固定会社，page 为页码。"""
+    index = _user_index(user_id)
     filter_source = "yuzu" if only_yuzu else company_source
-    if not book:
+    if index["size"] == 0:
         return "图鉴还是空的，快用 /waifu、/yuzuwaifu 或会社专属入口抽卡吧\n" + usage_text()
-    rows: list[dict[str, Any]] = []
-    counts = {source: 0 for source in companies.FIXED_WAIFU_COMPANIES}
-    normal_count = 0
-    for entry in book.values():
-        src = str(entry.get("source") or "waifu")
-        if src in counts:
-            counts[src] += 1
-        else:
-            normal_count += 1
-        if filter_source and not _entry_matches_source(entry, filter_source):
-            continue
-        rows.append(entry)
+    rows = (
+        index["by_source"].get(filter_source, index["rows"])
+        if filter_source
+        else index["rows"]
+    )
     if not rows:
         if filter_source:
             label = companies.FIXED_WAIFU_LABELS.get(filter_source, "该会社")
             return f"还没有{label}角色入库"
         return "图鉴还是空的"
-    # 固定会社入口在前，其余按首次收录时间倒序
-    rows = _ordered_rows({str(r.get("character_id") or ""): r for r in rows})
+    counts = index["counts"]
+    normal_count = index["normal_count"]
+    book_size = index["size"]
+    total = len(rows)
+    page_size = max(1, int(page_size))
+    pages = max(1, (total + page_size - 1) // page_size)
+    page = max(1, min(int(page or 1), pages))
+    start = (page - 1) * page_size
+    page_rows = rows[start:start + page_size]
+    page_note = f"（第 {page}/{pages} 页）" if pages > 1 else ""
     if filter_source:
         label = companies.FIXED_WAIFU_LABELS.get(filter_source, "会社")
-        header = f"【{label}图鉴】共 {len(rows)} 位"
+        header = f"【{label}图鉴】共 {total} 位{page_note}"
         progress = company_progress(user_id, filter_source)
         if progress is not None:
             header += f"\n{label}收藏进度：{progress[0]}/{progress[1]}"
@@ -459,22 +841,36 @@ def collection_text(
             "key": "Key",
             "saga": "SAGA",
             "purple": "Purple",
+            "front": "Front",
+            "crystal": "Cryst",
+            "hook": "HOOK",
+            "smee": "SMEE",
+            "asa": "ASa",
+            "mado": "Mado",
+            "pal": "PAL",
+            "favo": "FAVO",
+            "makura": "枕",
+            "august": "八月",
+            "nitro": "N+",
+            "qruppo": "Qruppo",
         }
         parts = [
             f"{short_labels[source]} {counts[source]}"
             for source in companies.FIXED_WAIFU_COMPANIES
+            if counts[source] > 0
         ]
         parts.append(f"常规 {normal_count}")
+        page_suffix = f" · 第 {page}/{pages} 页" if pages > 1 else ""
         header = (
-            f"【我的角色图鉴】共 {len(book)} 位（"
+            f"【我的角色图鉴】共 {book_size} 位（"
             + " / ".join(parts)
-            + "）"
+            + f"{page_suffix}）"
         )
         progress = yuzu_progress(user_id)
         if progress is not None:
             header += f"\n柚子社收藏进度：{progress[0]}/{progress[1]}"
     lines = [header]
-    for index, entry in enumerate(rows[:40], start=1):
+    for index, entry in enumerate(page_rows, start=start + 1):
         name = str(entry.get("name") or entry.get("original") or entry.get("character_id"))
         cn_name = str(entry.get("cn_name") or "").strip()
         if cn_name and cn_name != name:
@@ -488,7 +884,12 @@ def collection_text(
         if game:
             line += f"（{game}）"
         lines.append(line)
-    if len(rows) > 40:
-        lines.append(f"……（还有 {len(rows) - 40} 位未展示）")
+    if pages > 1:
+        nav = []
+        if page > 1:
+            nav.append(f"上一页：{command} page {page - 1}")
+        if page < pages:
+            nav.append(f"下一页：{command} page {page + 1}")
+        lines.append(" ｜ ".join(nav))
     lines.append("发数字或名字查看角色卡片：/waifu collection <序号|名字>")
     return "\n".join(lines)

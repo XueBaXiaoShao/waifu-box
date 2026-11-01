@@ -299,13 +299,3 @@ def pending_outgoing(user_id: int) -> list[dict[str, Any]]:
         for trade in pending_trades(user_id)
         if int(trade.get("proposer") or 0) == user_id
     ]
-
-
-def ranking(records: list[tuple[int, dict[str, Any]]]) -> list[tuple[int, int, str]]:
-    """按今日老婆稀有度排行：[(user_id, 星级, 稀有度名)]，按星级降序。"""
-    entries: list[tuple[int, int, str]] = []
-    for user_id, record in records:
-        rarity, stars = rarity_of_record(record)
-        entries.append((int(user_id), int(stars), rarity))
-    entries.sort(key=lambda item: (-item[1], item[0]))
-    return entries

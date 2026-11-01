@@ -22,6 +22,7 @@ def test_render_card_returns_jpeg(tmp_path) -> None:
         character,
         _image_bytes(),
         company_name="Yuzusoft（柚子社）",
+        header="今日生日",
     )
     assert data[:2] == b"\xff\xd8"
     rendered = Image.open(BytesIO(data))
@@ -71,3 +72,40 @@ class _FakeCharacter:
         year = 2020
 
     game = _Game()
+
+
+def test_display_game_title_skips_duplicate_english_translation() -> None:
+    class _Game:
+        title = "RIDDLE JOKER"
+        jp_title = ""
+        cn_title = "Riddle Joker"
+
+    assert card._display_game_title(_Game()) == "RIDDLE JOKER"
+
+
+def test_display_game_title_keeps_real_translation() -> None:
+    class _Game:
+        title = "Café Stella"
+        jp_title = "喫茶ステラと死神の蝶"
+        cn_title = "星光咖啡馆"
+
+    assert card._display_game_title(_Game()) == "Café Stella（星光咖啡馆）"
+
+
+def test_clean_description_strips_vndb_markup() -> None:
+    raw = (
+        "[b]Profile[/b]\n"
+        "[url=https://vndb.org/c1]Tomohiro[/url] &amp; "
+        "[url=/c2]Yukigeshiki[/url]\n"
+        "[spoiler]hidden[/spoiler]"
+    )
+    cleaned = card.clean_description(raw)
+    assert "Profile" in cleaned
+    assert "Tomohiro" in cleaned
+    assert "Yukigeshiki" in cleaned
+    assert "hidden" in cleaned
+    assert "&" in cleaned
+    assert "[url" not in cleaned
+    assert "[/url]" not in cleaned
+    assert "[b]" not in cleaned
+    assert "[/b]" not in cleaned

@@ -90,6 +90,30 @@ def test_waifu_pool_keys_cover_requested_companies() -> None:
     assert "entergram" in pool
 
 
+def test_fixed_waifu_includes_new_special_pools() -> None:
+    """Makura / August / Nitroplus 作为特殊卡池会社入口。"""
+    assert companies.FIXED_WAIFU_COMPANIES["makura"] == "makura"
+    assert companies.FIXED_WAIFU_COMPANIES["august"] == "august"
+    assert companies.FIXED_WAIFU_COMMANDS["makura"] == "/makurawaifu"
+    assert companies.FIXED_WAIFU_COMMANDS["august"] == "/augustwaifu"
+    assert "Makura" in companies.FIXED_WAIFU_LABELS["makura"]
+    assert "August" in companies.FIXED_WAIFU_LABELS["august"]
+    assert companies.FIXED_WAIFU_COMPANIES["nitro"] == "nitroplus"
+    assert companies.FIXED_WAIFU_COMMANDS["nitro"] == "/nitroplus"
+    assert "Nitroplus" in companies.FIXED_WAIFU_LABELS["nitro"]
+    assert companies.FIXED_WAIFU_COMPANIES["qruppo"] == "qruppo"
+    assert companies.FIXED_WAIFU_COMMANDS["qruppo"] == "/qruppowaifu"
+    assert companies.FIXED_WAIFU_LABELS["qruppo"] == "Qruppo"
+
+
+def test_fixed_waifu_search_splits_hooksoft_brands() -> None:
+    """固定入口按品牌拆分：HOOKSOFT 本体、SMEE、ASa Project 各自独立。"""
+    assert companies.fixed_search_names("hooksoft") == ["HOOKSOFT", "Hooksoft"]
+    assert "SMEE" not in companies.fixed_search_names("hooksoft")
+    assert companies.fixed_search_names("smee") == ["SMEE"]
+    assert companies.fixed_search_names("asaproject") == ["ASa Project"]
+
+
 def test_catalog_includes_subsidiary_search_names() -> None:
     assert "Yuzusoft SOUR" in companies.COMPANIES["yuzusoft"]["search"]
     assert "SMEE" in companies.COMPANIES["hooksoft"]["search"]

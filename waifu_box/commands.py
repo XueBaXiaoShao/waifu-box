@@ -22,8 +22,9 @@ from . import (
     companies,
     http,
     library,
+    natsume_state,
     permissions,
-    stats,
+    shoukeni_state,
     vndb,
     waifu,
     waifu_cache,
@@ -71,9 +72,22 @@ _is_slash_yuzuwaifu = _is_slash_fixed_waifu("yuzuwaifu")
 _is_slash_keywaifu = _is_slash_fixed_waifu("keywaifu")
 _is_slash_sagawaifu = _is_slash_fixed_waifu("sagawaifu")
 _is_slash_purplewaifu = _is_slash_fixed_waifu("purplewaifu")
+_is_slash_frontwaifu = _is_slash_fixed_waifu("frontwaifu")
+_is_slash_crystalwaifu = _is_slash_fixed_waifu("crystalwaifu")
+_is_slash_hookwaifu = _is_slash_fixed_waifu("hookwaifu")
+_is_slash_madowaifu = _is_slash_fixed_waifu("madowaifu")
+_is_slash_palwaifu = _is_slash_fixed_waifu("palwaifu")
+_is_slash_favowaifu = _is_slash_fixed_waifu("favowaifu")
+_is_slash_smeewaifu = _is_slash_fixed_waifu("smeewaifu")
+_is_slash_asawaifu = _is_slash_fixed_waifu("asawaifu")
+_is_slash_makurawaifu = _is_slash_fixed_waifu("makurawaifu")
+_is_slash_augustwaifu = _is_slash_fixed_waifu("augustwaifu")
+_is_slash_nitroplus = _is_slash_fixed_waifu("nitroplus")
+_is_slash_qruppowaifu = _is_slash_fixed_waifu("qruppowaifu")
+_is_slash_nagato = _is_slash_fixed_waifu("nagato")
 
 
-# 长門的枣子姐圣经（/yuzuwaifu shiki natsume 彩蛋，无 emoji，带标点）
+# 长門的枣子姐圣经（/nagato 彩蛋，无 emoji，带标点）
 _NATSUME_HOLY_TEXTS = (
     "本人真的想棗子姐想得要發瘋了。本人躺在床上会想棗子姐，本人洗澡会想棗子姐，"
     "本人出門会想棗子姐，本人走路会想棗子姐，本人坐車会想棗子姐，本人上班会想棗子姐，"
@@ -102,16 +116,70 @@ _NATSUME_HOLY_TEXTS = (
     "ナツメ……ヘヘヘ……ナツメさん……ナツメ……ヘヘヘ……ナツメさん……"
     "ナツメ……ヘヘヘ……ナツメさん……ナツメ……ヘヘヘ……ナツメさん……"
     "ナツメ……ヘヘヘ……ナツメさん……ナツメ……ヘヘヘ……ナツメさん…",
+    """ナツメ！ナツメ！ナツメ！ナツメぅぅうううわぁああああああああああああああああああああああん！！！
+あぁああああ…ああ…あっあっー！あぁああああああ！！！ナツメナツメナツメぅううぁわぁああああ！！！
+あぁクンカクンカ！クンカクンカ！スーハースーハー！スーハースーハー！いい匂いだなぁ…くんくん
+んはぁっ！四季ナツメたんの黒髪ロングをクンカクンカしたいお！クンカクンカ！あぁあ！！
+間違えた！モフモフしたいお！モフモフ！モフモフ！髪髪モフモフ！カリカリモフモフ…きゅんきゅんきゅい！！
+Hシーンのナツメたんかわいかったよぅ！！あぁぁああ…あああ…あっあぁああああ！！ふぁぁあああんんっ！！
+Getchuキャラ部門大賞取れて良かったねナツメたん！あぁあああああ！かわいい！ナツメたん！かわいい！あっああぁああ！
+音声も発売されて嬉し…いやぁああああああ！！！にゃああああああああん！！ぎゃああああああああ！！
+ぐあああああああああああ！！！エロゲなんて現実じゃない！！！！あ…同人誌も音声もよく考えたら…
+ナ ツ メ ち ゃ ん は 現実 じ ゃ な い？にゃあああああああああああああん！！うぁああああああああああ！！
+そんなぁああああああ！！いやぁぁぁあああああああああ！！はぁああああああん！！キャフェステリャぁああああ！！
+この！ちきしょー！やめてやる！！現実なんかやめ…て…え！？見…てる？イベントCGのナツメちゃんが僕を見てる？
+イベントCGのナツメちゃんが僕を見てるぞ！ナツメちゃんが僕を見てるぞ！立ち絵のナツメちゃんが僕を見てるぞ！！
+音声のナツメちゃんが僕に話しかけてるぞ！！！よかった…世の中まだまだ捨てたモンじゃないんだねっ！
+いやっほぉおおおおおおお！！！僕にはナツメちゃんがいる！！やったよ希！！ひとりでできるもん！！！
+あ、同人誌のナツメちゃあああああああああああああああん！！いやぁあああああああああああああああ！！！！
+あっあんああっああんあスズネ様ぁあ！！カ、カンナー！！ノゾミちゃぁああああああン！！！メイちゃぁあああん！！
+ううっうぅうう！！俺の想いよナツメへ届け！！カフェステラのナツメへ届け！""",
+)
+
+_NATSUME_NEW_TEXTS = (
+    "棗子的舔嘴……嘿嘿嘿……棗子的舔嘴……棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的脚……嘿嘿嘿……棗子的脚……棗子的腿子……嘿嘿嘿……棗子的腿子……棗子的舔嘴……嘿嘿嘿……棗子的舔嘴……棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的脚……嘿嘿嘿……棗子的脚……棗子的腿子……嘿嘿嘿……棗子的腿子……",
+    "棗子的舔嘴……嘿嘿嘿……棗子的舔嘴……棗子的腿子……嘿嘿嘿……棗子的腿子……棗子的脚……嘿嘿嘿……棗子的脚……棗子的舔嘴……嘿嘿嘿……棗子的舔嘴……棗子的腿子……嘿嘿嘿……棗子的腿子……棗子的脚……嘿嘿嘿……棗子的脚……",
+    "棗子的黑臉……嘿嘿嘿……棗子的脚……棗子的黑臉……嘿嘿嘿……棗子的脚……棗子的黑臉……嘿嘿嘿……棗子的脚……棗子的黑臉……嘿嘿嘿……棗子的脚……棗子的黑臉……嘿嘿嘿……棗子的脚……棗子的黑臉……嘿嘿嘿……棗子的脚……",
+    "棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的黑臉……嘿嘿嘿……棗子的黑臉……棗子的黑臉……嘿嘿嘿……棗子的黑臉……",
+)
+_NATSUME_XIAHEXIAO_TEXTS = (
+    "怎麼会有人不喜歡夏和小呢今天也是想夏和小的一天夏和小嘿嘿嘿本人真的想夏和小想的要發瘋了"
+    "本人躺在床上会想夏和小本人洗澡会想夏和小本人出門会想夏和小本人走路会想夏和小"
+    "本人坐車会想夏和小本人上班会想夏和小本人開会会想夏和小本人摸魚会想夏和小"
+    "本人放工会想夏和小本人喝酒会想夏和小本人喝醉了会想夏和小"
+    "本人盯着夏和小配的四季ナツメ看本人盯着夏和小配的壬生千咲看本人盯着夏和小配的結城希亜看"
+    "本人盯着夏和小配的谷風天音看本人盯着夏和小配的茶園那優花看本人盯着夏和小配的本間心鈴看"
+    "本人盯着夏和小配的椎名雪看本人盯着夏和小配的有瀬かぐや看本人盯着夏和小配的峠の霊看"
+    "看的本人真的覚得自己像中邪了一樣，本人対夏和小的念想似乎都是病態的了"
+    "本人好孤獨啊！真的好孤獨啊！你知道嗎？每到深夜本人渾身滾燙滾燙本人發病了本人要瘋狂"
+    "夏和小……嘿嘿嘿……夏和小……夏和小……嘿嘿嘿……夏和小……夏和小……嘿嘿嘿……夏和小……"
+    "夏和小……嘿嘿嘿……夏和小……夏和小……嘿嘿嘿……夏和小……夏和小……嘿嘿嘿……夏和小……"
+    "夏和小……嘿嘿嘿……夏和小……夏和小……嘿嘿嘿……夏和小……夏和小……",
+)
+_NATSUME_ZAOZI_TEXTS = (
+    "怎麼会有人不喜歡棗子姐呢 今天也是想棗子姐的一天 棗子姐 嘿嘿嘿 本人真的想棗子姐想的要發瘋了 "
+    "本人躺在床上会想棗子姐 本人洗澡会想棗子姐 本人出門会想棗子姐 本人走路会想棗子姐 "
+    "本人坐車会想棗子姐 本人上班会想棗子姐 本人開会会想棗子姐 本人摸魚会想棗子姐 "
+    "本人放工会想棗子姐 本人喝酒会想棗子姐 本人喝醉了会想棗子姐 "
+    "本人盯着切片裏的棗子姐看 本人盯着谷子裏的棗子姐看 本人盯着本子裏的棗子姐看 "
+    "本人盯着插畫裏的棗子姐看 本人盯着手辦裏的棗子姐看 本人盯着星光咖啡館与死神之蝶裏的四季夏目看 "
+    "看的本人真的覚得自己像中邪了一樣，本人対棗子姐的念想似乎都是病態的了 "
+    "本人好孤獨啊！真的好孤獨啊！ 你知道嗎？ 每到深夜 本人渾身滾燙滾燙 本人發病了 本人要瘋狂 "
+    "棗子姐…… 嘿嘿嘿……棗子姐…… 棗子姐…… 嘿嘿嘿……棗子姐…… 棗子姐…… 嘿嘿嘿……棗子姐…… "
+    "棗子姐…… 嘿嘿嘿……棗子姐……棗子姐……嘿嘿嘿……棗子姐……棗子姐…… 嘿嘿嘿……棗子姐……",
+)
+_NATSUME_ALL_TEXTS = (
+    _NATSUME_HOLY_TEXTS
+    + _NATSUME_NEW_TEXTS
+    + _NATSUME_XIAHEXIAO_TEXTS
+    + _NATSUME_ZAOZI_TEXTS
 )
 
 
-def _is_shiki_natsume_easter_egg(value: str) -> bool:
-    """/yuzuwaifu shiki natsume（含 四季ナツメ / natume 等变体）触发彩蛋。"""
-    text = (value or "").strip().lower()
-    compact = re.sub(r"[\s\-_/]+", "", text)
+def _natsume_response(pool: tuple[str, ...] | None = None) -> str:
     return (
-        re.match(r"^(shiki\s*natsume|natume|なつめ|棗子姐|枣子姐)$", compact) is not None
-        or "shikinatsume" in compact
+        random.choice(pool or _NATSUME_HOLY_TEXTS)
+        + "\n\n—— ネタ来源：＠中江学会長門(@Nagato_KKO)"
     )
 
 
@@ -159,8 +227,93 @@ def _collection_alias_source(keyword: str) -> str | None:
         "purple software": "purple",
         "紫": "purple",
         "紫社": "purple",
+        "front": "front",
+        "frontwing": "front",
+        "前翼": "front",
+        "前翼社": "front",
+        "crystal": "crystal",
+        "crystalia": "crystal",
+        "晶": "crystal",
+        "hook": "hook",
+        "hooksoft": "hook",
+        "钩": "hook",
+        "smee": "smee",
+        "asa": "asa",
+        "asaproject": "asa",
+        "asa project": "asa",
+        "mado": "mado",
+        "madosoft": "mado",
+        "窗": "mado",
+        "窗社": "mado",
+        "pal": "pal",
+        "palette": "pal",
+        "调色板": "pal",
+        "调色板社": "pal",
+        "favo": "favo",
+        "favorite": "favo",
+        "f社": "favo",
+        "makura": "makura",
+        "maku": "makura",
+        "枕": "makura",
+        "august": "august",
+        "aug": "august",
+        "八月": "august",
+        "八月社": "august",
+        "nitro": "nitro",
+        "nitroplus": "nitro",
+        "nitro plus": "nitro",
+        "n+": "nitro",
+        "n+社": "nitro",
+        "qruppo": "qruppo",
+        "qroppo": "qruppo",
+        "qr": "qruppo",
     }
     return aliases.get((keyword or "").strip().lower())
+
+
+_PAGE_RE = re.compile(r"(?:^|\s)page\s+(\d+)\s*$", re.IGNORECASE)
+_SEARCH_PREFIX_RE = re.compile(r"^(?:search|搜索|查找)\s+(.+)$", re.IGNORECASE)
+_SEARCH_ONLY_WORDS = {"search", "搜索", "查找"}
+
+
+def _extract_page(value: str) -> tuple[str, int]:
+    """从图鉴参数末尾解析「page N」，返回（去掉页码的参数, 页码）。"""
+    text = (value or "").strip()
+    match = _PAGE_RE.search(text)
+    if match is None:
+        return text, 1
+    page = max(1, int(match.group(1)))
+    return text[: match.start()].strip(), page
+
+
+def _parse_collection_keyword(
+    text: str,
+) -> tuple[str, str | None, bool]:
+    """解析图鉴参数：会社前缀、search 前缀与搜索词。"""
+    keyword = (text or "").strip()
+    alias_source: str | None = None
+    if keyword:
+        first, _, rest = keyword.partition(" ")
+        alias = _collection_alias_source(first)
+        if alias:
+            alias_source = alias
+            keyword = rest.strip()
+    search_mode = False
+    if keyword:
+        if keyword.lower() in _SEARCH_ONLY_WORDS:
+            return "", alias_source, True
+        match = _SEARCH_PREFIX_RE.match(keyword)
+        if match:
+            search_mode = True
+            keyword = match.group(1).strip()
+    return keyword, alias_source, search_mode
+
+
+def _company_pool_hint() -> str:
+    return (
+        "【卡池提示】下次想指定会社吗？例如 /waifu yuzu、/waifu hook；"
+        "原有 /yuzuwaifu 等指令也保留。"
+    )
 
 
 def _repeat_note(existing: dict) -> str:
@@ -180,6 +333,9 @@ waifu_short = on_command("waifu", rule=_is_slash_waifu, priority=1, block=True)
 yuzuwaifu_short = on_command(
     "yuzuwaifu", rule=_is_slash_yuzuwaifu, priority=1, block=True
 )
+nagato_short = on_command(
+    "nagato", rule=_is_slash_nagato, priority=1, block=True
+)
 keywaifu_short = on_command(
     "keywaifu", rule=_is_slash_keywaifu, priority=1, block=True
 )
@@ -189,35 +345,54 @@ sagawaifu_short = on_command(
 purplewaifu_short = on_command(
     "purplewaifu", rule=_is_slash_purplewaifu, priority=1, block=True
 )
+frontwaifu_short = on_command(
+    "frontwaifu", rule=_is_slash_frontwaifu, priority=1, block=True
+)
+crystalwaifu_short = on_command(
+    "crystalwaifu", rule=_is_slash_crystalwaifu, priority=1, block=True
+)
+hookwaifu_short = on_command(
+    "hookwaifu", rule=_is_slash_hookwaifu, priority=1, block=True
+)
+madowaifu_short = on_command(
+    "madowaifu", rule=_is_slash_madowaifu, priority=1, block=True
+)
+palwaifu_short = on_command(
+    "palwaifu", rule=_is_slash_palwaifu, priority=1, block=True
+)
+favowaifu_short = on_command(
+    "favowaifu", rule=_is_slash_favowaifu, priority=1, block=True
+)
+smeewaifu_short = on_command(
+    "smeewaifu", rule=_is_slash_smeewaifu, priority=1, block=True
+)
+asawaifu_short = on_command(
+    "asawaifu", rule=_is_slash_asawaifu, priority=1, block=True
+)
+makurawaifu_short = on_command(
+    "makurawaifu", rule=_is_slash_makurawaifu, priority=1, block=True
+)
+augustwaifu_short = on_command(
+    "augustwaifu", rule=_is_slash_augustwaifu, priority=1, block=True
+)
+nitroplus_short = on_command(
+    "nitroplus", rule=_is_slash_nitroplus, priority=1, block=True
+)
+qruppowaifu_short = on_command(
+    "qruppowaifu", rule=_is_slash_qruppowaifu, priority=1, block=True
+)
 
 
 def _help_text() -> str:
     return """【每日老婆】
-- /waifu —— 从本地 VNDB 资料库抽每日老婆，并生成角色信息卡片
-- /waifu settings —— 查看/修改抽卡设置（热度、年代、全局会社池；仅管理员）
-- /waifu settings group=<群号> kaisha=<会社key|off> —— 群会社后门
-- /waifu settings group=<群号> year=off|on —— 该群解除/恢复年代限制
-- /waifu settings group=<群号> popular=off|on —— 该群解除/恢复热度限制
-- /waifu reset [all|<QQ号>] —— 重置每日额度（仅管理员）
-- /waifu check <QQ号> —— 查看指定用户今天抽到的老婆（仅管理员）
-- /waifu stats [天数] —— 最近 N 天角色抽取排名（默认 7 天，仅管理员）
-- /waifu collection —— 查看我的角色图鉴（抽到自动收录，支持检索/序号查看）
-- /waifu collection usage —— 图鉴检视用法说明
-- /yuzuwaifu collection [序号|名字] —— 柚子社图鉴（/waifu collection yuzu 亦可）
-- /keywaifu collection [序号|名字] —— Key 图鉴
-- /sagawaifu collection [序号|名字] —— SAGA PLANETS 图鉴
-- /purplewaifu collection [序号|名字] —— Purple software 图鉴
-- /waifu 2025 —— 从 2025 新收录作品池抽取（与 /waifu 共享每日额度）
-- /yuzuwaifu —— 柚子社专属老婆（固定柚子社，同样输出卡片；与 /waifu 共享每日额度）
-- /keywaifu —— Key 专属老婆（固定 Key，与 /waifu 共享每日额度）
-- /sagawaifu —— SAGA PLANETS 专属老婆（固定 SAGA PLANETS，与 /waifu 共享每日额度）
-- /purplewaifu —— Purple software 专属老婆（固定 Purple software，与 /waifu 共享每日额度）
-- /waifu trade @对方 —— 提议交换双方的今日每日老婆（任意角色均可交易，会社入口 trade 亦可）
-- /waifu accept|reject —— 接受/拒绝交易（只有一笔时不用交易号）
-- /waifu cancel —— 撤销自己发起的交易（只有一笔时不用交易号）
-- /yuzuwaifu rank —— 今日每日老婆稀有度排行榜（/waifu rank 亦可）
-- /yuzuwaifu stats [天数] —— 最近 N 天柚子社角色抽取排行榜（默认 7 天，仅管理员）
-- /keywaifu stats [天数] / /sagawaifu stats [天数] / /purplewaifu stats [天数] —— 对应会社抽取排行榜"""
+- /waifu —— 抽今日老婆；/waifu <会社> 指定会社（如 yuzu、hook、makura、august、nitro）
+- /waifu 2025 —— 2025 新收录作品池
+- /waifu collection [page N|search <关键词>] —— 查看/搜索图鉴
+- /waifu collection @某人 [page N] —— 查看他人图鉴（仅管理员）
+- /waifu list [@某人|<QQ号>] —— 查看今天抽到的老婆
+- /waifu trade @对方 / accept / reject / cancel —— 今日老婆交易
+- 管理员：/waifu settings（含群会社/年代后门）、reset、undo、check、set
+- 会社专属入口：/yuzuwaifu、/keywaifu、/makurawaifu、/augustwaifu、/nitroplus、/qruppowaifu 等（共享每日额度，支持 collection/trade）"""
 
 
 @waifu_short.handle()
@@ -238,8 +413,6 @@ async def handle_waifu_short(
 _WAIFU_SUBCOMMANDS = (
     "list",
     "trade",
-    "rank",
-    "stats",
     "collection",
     "accept",
     "reject",
@@ -279,14 +452,43 @@ async def handle_yuzuwaifu_short(
     arg: Message = CommandArg(),
 ) -> None:
     value = (arg.extract_plain_text() or "").strip()
-    if _is_shiki_natsume_easter_egg(value):
-        await matcher.finish(
-            random.choice(_NATSUME_HOLY_TEXTS)
-            + "\n\n—— ネタ来源：＠中江学会長門(@Nagato_KKO)"
-        )
     await _handle_fixed_waifu_short(
         event, matcher, arg, "yuzu", "yuzuwaifu"
     )
+
+
+@nagato_short.handle()
+async def handle_nagato(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    if not _plugin_enabled_for_event(event):
+        await matcher.finish("该群已禁用每日老婆功能")
+    value = (arg.extract_plain_text() or "").strip()
+    parts = value.split(maxsplit=1)
+    if parts and parts[0].lower() == "limit":
+        if not permissions.is_admin(event.user_id):
+            await matcher.finish("仅管理员可设置长文触发上限")
+        if len(parts) < 2 or not parts[1].strip():
+            await matcher.finish(
+                f"当前每人每天上限：{natsume_state.limit()} 次（0=不限）"
+                "\n用法：/nagato limit <次数>"
+            )
+        raw = parts[1].strip()
+        if not raw.isdigit():
+            await matcher.finish("用法：/nagato limit <次数>（0=不限）")
+        new_limit = natsume_state.set_limit(int(raw))
+        await matcher.finish(
+            "已将 /nagato 的每人每天上限"
+            f"设为 {new_limit} 次（0=不限）"
+        )
+    allowed, used, limit = natsume_state.consume(event.user_id)
+    if not allowed:
+        await matcher.finish(
+            f"今天的长文次数已用完（每人每天上限 {limit} 次），明天再来吧。"
+        )
+    await matcher.finish(_natsume_response(_NATSUME_ALL_TEXTS))
 
 
 @keywaifu_short.handle()
@@ -322,6 +524,138 @@ async def handle_purplewaifu_short(
     )
 
 
+@frontwaifu_short.handle()
+async def handle_frontwaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "front", "frontwaifu"
+    )
+
+
+@crystalwaifu_short.handle()
+async def handle_crystalwaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "crystal", "crystalwaifu"
+    )
+
+
+@hookwaifu_short.handle()
+async def handle_hookwaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "hook", "hookwaifu"
+    )
+
+
+@madowaifu_short.handle()
+async def handle_madowaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "mado", "madowaifu"
+    )
+
+
+@palwaifu_short.handle()
+async def handle_palwaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "pal", "palwaifu"
+    )
+
+
+@favowaifu_short.handle()
+async def handle_favowaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "favo", "favowaifu"
+    )
+
+
+@smeewaifu_short.handle()
+async def handle_smeewaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "smee", "smeewaifu"
+    )
+
+
+@asawaifu_short.handle()
+async def handle_asawaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "asa", "asawaifu"
+    )
+
+
+@makurawaifu_short.handle()
+async def handle_makurawaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "makura", "makurawaifu"
+    )
+
+
+@augustwaifu_short.handle()
+async def handle_augustwaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "august", "augustwaifu"
+    )
+
+
+@nitroplus_short.handle()
+async def handle_nitroplus_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "nitro", "nitroplus"
+    )
+
+
+@qruppowaifu_short.handle()
+async def handle_qruppowaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "qruppo", "qruppowaifu"
+    )
+
+
 def _image_segment(url_or_base64: str | None) -> MessageSegment | None:
     if not url_or_base64:
         return None
@@ -342,7 +676,7 @@ def _collection_note(user_id: int, record: dict) -> str:
         name = str(record.get("name") or record.get("original") or "")
         return (
             f"📖 「{name}」已在你的图鉴中（不重复收录）\n"
-            f"可以把它今天送出：/waifu trade @对方 换想要的老婆"
+            f"查看：/waifu collection ｜ 可以送出：/waifu trade @对方"
         )
     size = collection_book.collection_size(user_id)
     return (
@@ -545,6 +879,26 @@ async def _draw_local_character(
     return None
 
 
+async def _draw_character_with_fallback(
+    settings: dict,
+    group_settings: dict,
+    source: str,
+    exclude_ids: set[str] | None = None,
+):
+    """本地库优先；本地无对应会社/角色时回退 VNDB。"""
+    local = await _draw_local_character(
+        settings, group_settings, source, exclude_ids
+    )
+    if local is not None:
+        return "local", local
+    character = await _draw_waifu_character(
+        settings, group_settings, source, exclude_ids
+    )
+    if character is not None:
+        return "vndb", character
+    return None, None
+
+
 async def _cmd_waifu(
     matcher: Matcher,
     event: MessageEvent,
@@ -554,13 +908,22 @@ async def _cmd_waifu(
     user_id = int(getattr(event, "user_id", 0))
     group_id = getattr(event, "group_id", None)
     value = (value or "").strip()
+    # /waifu <会社> 等价于对应会社入口，如 /waifu yuzu == /yuzuwaifu
+    if source == "waifu":
+        first, _, rest = value.partition(" ")
+        company_source = _collection_alias_source(first)
+        if company_source:
+            source = company_source
+            value = rest.strip()
     command, _, arg = value.partition(" ")
     command = command.lower()
+
+    if command in ("help", "帮助"):
+        await matcher.finish(_help_text())
 
     if command in (
         "list",
         "trade",
-        "rank",
         "accept",
         "reject",
         "cancel",
@@ -571,37 +934,23 @@ async def _cmd_waifu(
         )
         return
 
-    if command == "stats":
-        if not permissions.is_admin(user_id):
-            await matcher.finish("只有管理员可以查看抽取统计")
-        days = 7
-        if arg.strip():
-            try:
-                parsed_days = int(arg.strip())
-                if 1 <= parsed_days <= 30:
-                    days = parsed_days
-            except ValueError:
-                pass
-        fixed_source = (
-            source if source in companies.FIXED_WAIFU_COMPANIES else None
-        )
-        await matcher.finish(
-            stats.week_top_text(
-                days=days, limit=10, source=fixed_source
-            )
-        )
-
     if command in ("collection", "图鉴"):
-        keyword = arg.strip()
+        keyword, page = _extract_page(arg)
+        keyword, alias_source, search_mode = _parse_collection_keyword(keyword)
+        if alias_source is None and source in companies.FIXED_WAIFU_COMPANIES:
+            alias_source = source
         target_user_id = user_id
         viewing_other = False
-        # 管理员可查看他人图鉴：@某人 或直接发 QQ 号（有图鉴时按他人图鉴处理）
+        # 管理员可查看他人图鉴：@某人 或直接发 QQ 号
         at_ids = _at_user_ids(event)
+        if at_ids and not permissions.is_admin(user_id):
+            await matcher.finish("只有管理员可以查看他人图鉴")
         if at_ids and permissions.is_admin(user_id):
             target_user_id = at_ids[0]
             viewing_other = True
         elif (
-            keyword.isdigit()
+            not search_mode
+            and keyword.isdigit()
             and permissions.is_admin(user_id)
             and collection_book.user_collection(int(keyword))
         ):
@@ -613,35 +962,75 @@ async def _cmd_waifu(
         )
         # 补录遗漏：交易获得的角色等（同步该用户当前 waifu_state 记录）
         collection_book.sync_from_state(target_user_id)
-        alias_source = _collection_alias_source(keyword)
-        if alias_source:
+        if viewing_other:
+            page_command = f"/waifu collection {target_user_id}"
+        elif alias_source:
+            page_command = (
+                f"{companies.FIXED_WAIFU_COMMANDS[alias_source]} collection"
+            )
+        else:
+            page_command = "/waifu collection"
+        if search_mode and not keyword:
+            if viewing_other:
+                await matcher.finish(
+                    "用法：/waifu collection @某人 search <关键词>"
+                )
+            await matcher.finish(
+                f"用法：{page_command} search <关键词>"
+            )
+        if alias_source and not keyword:
             await matcher.finish(
                 collection_book.collection_text(
-                    target_user_id, company_source=alias_source
+                    target_user_id,
+                    company_source=alias_source,
+                    page=page,
+                    command=page_command,
                 )
             )
         if keyword in ("usage", "help", "用法", "帮助"):
             await matcher.finish(collection_book.usage_text())
         if keyword:
             # 纯 QQ 号且已切换目标：直接展示对方图鉴列表，避免把 QQ 号当检索词
-            if viewing_other and keyword.isdigit():
+            if viewing_other and keyword.isdigit() and not search_mode:
                 await matcher.finish(
                     "【他人的图鉴】\n"
-                    + collection_book.collection_text(target_user_id)
+                    + collection_book.collection_text(
+                        target_user_id,
+                        page=page,
+                        command=page_command,
+                    )
                 )
-            matches = collection_book.search_collection(target_user_id, keyword)
+            matches = collection_book.search_collection(
+                target_user_id, keyword, company_source=alias_source
+            )
             if not matches:
-                await matcher.finish(f"图鉴里没有找到「{keyword}」相关的角色")
+                prefix = "他人图鉴" if viewing_other else "图鉴"
+                await matcher.finish(
+                    f"{prefix}里没有找到「{keyword}」相关的角色，"
+                    "试试更短的名字或作品名"
+                )
             if len(matches) > 1:
-                names = [
-                    _display_name(m)
-                    for m in matches[:10]
-                ]
-                hint = "找到多个角色：\n" + "\n".join(
-                    f"{i + 1}. {name}"
-                    for i, name in enumerate(names)
-                ) + "\n发序号或更精确的名字查看卡片：/waifu collection <序号|名字>"
-                await matcher.finish(hint)
+                lines = [f"找到 {len(matches)} 个匹配角色："]
+                for match in matches[:8]:
+                    index = collection_book.collection_index(
+                        target_user_id,
+                        str(match.get("character_id") or ""),
+                        company_source=alias_source,
+                    )
+                    name_prefix = f"{index}. " if index else "- "
+                    lines.append(name_prefix + _display_name(match))
+                if len(matches) > 8:
+                    lines.append(
+                        f"……另有 {len(matches) - 8} 个匹配，请缩小关键词"
+                    )
+                if viewing_other:
+                    lines.append("请输入更精确的名字继续搜索")
+                else:
+                    lines.append(
+                        f"发序号或更精确的名字查看卡片："
+                        f"{page_command} <序号|名字>"
+                    )
+                await matcher.finish("\n".join(lines))
             # 唯一匹配：渲染角色卡片
             record = matches[0]
             reply_image = await _record_reply_image(record)
@@ -653,7 +1042,13 @@ async def _cmd_waifu(
             await matcher.finish(_waifu_reply(event, reply_image, _waifu_text(record, note)))
         header_note = "【他人的图鉴】" if target_user_id != user_id else ""
         await matcher.finish(
-            header_note + "\n" + collection_book.collection_text(target_user_id)
+            header_note
+            + "\n"
+            + collection_book.collection_text(
+                target_user_id,
+                page=page,
+                command=page_command,
+            )
         )
 
     if command == "virus":
@@ -672,7 +1067,7 @@ async def _cmd_waifu(
                 _waifu_reply(
                     event,
                     reply_image,
-                    repeat_note,
+                    _waifu_text(existing, repeat_note),
                 )
             )
         settings = waifu.load_settings()
@@ -717,6 +1112,25 @@ async def _cmd_waifu(
 
     is_admin = permissions.is_admin(user_id)
 
+    if command == "undo":
+        if not is_admin:
+            await matcher.finish("只有管理员可以撤销 reset")
+        info = waifu.undo_last_reset()
+        if info is None:
+            await matcher.finish("没有可撤销的 reset 记录")
+        if info.get("kind") == "all":
+            label = "全部用户"
+        else:
+            label = f"用户 {info.get('target')}"
+        text = (
+            f"已撤销最近一次 reset（{label}）："
+            f"恢复 {info.get('restored', 0)} 人"
+        )
+        skipped = int(info.get("skipped", 0))
+        if skipped:
+            text += f"，跳过 {skipped} 人（重置后已重新抽卡）"
+        await matcher.finish(text)
+
     if not value:
         existing = waifu.get_today_waifu(user_id)
         if existing:
@@ -726,7 +1140,7 @@ async def _cmd_waifu(
                 _waifu_reply(
                     event,
                     reply_image,
-                    repeat_note,
+                    _waifu_text(existing, repeat_note),
                 )
             )
         settings = waifu.load_settings()
@@ -736,24 +1150,23 @@ async def _cmd_waifu(
             if group_id is not None
             else set()
         )
-        if not await asyncio.to_thread(library.ensure_index):
-            character = await _draw_waifu_character(
+        kind = None
+        drawn = None
+        if source == "yuzu":
+            # omikuji 先抽时，yuzuwaifu 沿用其当天选中的角色
+            local = await asyncio.to_thread(
+                waifu.omikuji_yuzu_character, user_id
+            )
+            if local is not None:
+                kind, drawn = "local", local
+        if drawn is None:
+            kind, drawn = await _draw_character_with_fallback(
                 settings, group_settings, source, exclude_ids
             )
-            if character is None:
-                await matcher.finish("今天暂时抽不到老婆，请稍后再试")
-            record = waifu.save_waifu(
-                user_id, character, source=source, group_id=group_id
-            )
-            if source not in companies.FIXED_WAIFU_COMPANIES:
-                waifu_usage.mark_used(character.id)
-            image_url = record.get("image_url")
-        else:
-            local = await _draw_local_character(
-                settings, group_settings, source, exclude_ids
-            )
-            if local is None:
-                await matcher.finish("今天暂时抽不到老婆，请稍后再试")
+        if drawn is None:
+            await matcher.finish("今天暂时抽不到老婆，请稍后再试")
+        if kind == "local":
+            local = drawn
             character = _to_vndb_character(local)
             record = waifu.save_waifu(
                 user_id,
@@ -763,12 +1176,23 @@ async def _cmd_waifu(
                 group_id=group_id,
                 role=str(local.data.get("role") or ""),
             )
-            if source not in companies.FIXED_WAIFU_COMPANIES:
-                waifu_usage.mark_used(character.id)
-            image_url = await _local_reply_image(local, record.get("image_url") or "")
+            image_url = await _local_reply_image(
+                local, record.get("image_url") or ""
+            )
+        else:
+            character = drawn
+            record = waifu.save_waifu(
+                user_id, character, source=source, group_id=group_id
+            )
+            image_url = await _record_reply_image(record)
+        if source not in companies.FIXED_WAIFU_COMPANIES:
+            waifu_usage.mark_used(character.id)
         note = _collection_note(user_id, record)
+        if source == "waifu":
+            hint = _company_pool_hint()
+            note = f"{note}\n{hint}" if note else hint
         await matcher.finish(
-            _waifu_reply(event, image_url, note)
+            _waifu_reply(event, image_url, _waifu_text(record, note))
         )
         return
 
@@ -782,24 +1206,13 @@ async def _cmd_waifu(
             if group_id is not None
             else set()
         )
-        if not await asyncio.to_thread(library.ensure_index):
-            character = await _draw_waifu_character(
-                settings, group_settings, source, exclude_ids
-            )
-            if character is None:
-                await matcher.finish("更换失败，请稍后再试")
-            record = waifu.save_waifu(
-                user_id, character, source=source, group_id=group_id
-            )
-            if source not in companies.FIXED_WAIFU_COMPANIES:
-                waifu_usage.mark_used(character.id)
-            image_url = record.get("image_url")
-        else:
-            local = await _draw_local_character(
-                settings, group_settings, source, exclude_ids
-            )
-            if local is None:
-                await matcher.finish("更换失败，请稍后再试")
+        kind, drawn = await _draw_character_with_fallback(
+            settings, group_settings, source, exclude_ids
+        )
+        if drawn is None:
+            await matcher.finish("更换失败，请稍后再试")
+        if kind == "local":
+            local = drawn
             character = _to_vndb_character(local)
             record = waifu.save_waifu(
                 user_id,
@@ -809,27 +1222,47 @@ async def _cmd_waifu(
                 group_id=group_id,
                 role=str(local.data.get("role") or ""),
             )
-            if source not in companies.FIXED_WAIFU_COMPANIES:
-                waifu_usage.mark_used(character.id)
-            image_url = await _local_reply_image(local, record.get("image_url") or "")
+            image_url = await _local_reply_image(
+                local, record.get("image_url") or ""
+            )
+        else:
+            character = drawn
+            record = waifu.save_waifu(
+                user_id, character, source=source, group_id=group_id
+            )
+            image_url = await _record_reply_image(record)
+        if source not in companies.FIXED_WAIFU_COMPANIES:
+            waifu_usage.mark_used(character.id)
         await matcher.finish(
             _waifu_reply(
                 event,
                 image_url,
-                "",
+                _waifu_text(record, ""),
             )
         )
     elif command == "set":
-        if not is_admin:
-            await matcher.finish("只有管理员可以指定每日老婆")
         keyword = arg.strip()
-        if not keyword:
-            await matcher.finish("用法：/waifu set [<QQ号>] <角色名或VNDB ID>")
         target_user_id = user_id
-        first, _, rest = keyword.partition(" ")
-        if first.isdigit() and rest:
-            target_user_id = int(first)
-            keyword = rest.strip()
+        at_ids = _at_user_ids(event)
+        if at_ids:
+            target_user_id = at_ids[0]
+        else:
+            first, _, rest = keyword.partition(" ")
+            if first.isdigit() and rest:
+                target_user_id = int(first)
+                keyword = rest.strip()
+        if target_user_id != user_id and not is_admin:
+            await matcher.finish("只有管理员可以指定每日老婆")
+        if (
+            target_user_id == user_id
+            and not is_admin
+            and not shoukeni_state.has_token(user_id)
+        ):
+            await matcher.finish("只有管理员可以指定每日老婆")
+        if not keyword:
+            await matcher.finish(
+                "用法：/waifu set [@某人|<QQ号>] <角色名或VNDB ID>"
+            )
         local: library.LibraryCharacter | None = None
         local_items = await asyncio.to_thread(
             library.search_characters, keyword, 1
@@ -867,7 +1300,9 @@ async def _cmd_waifu(
                 source=source,
                 group_id=group_id,
             )
-            image_url = record.get("image_url")
+            image_url = await _record_reply_image(record)
+        if not is_admin:
+            shoukeni_state.consume_token(user_id)
         note = (
             f"已为用户 {target_user_id} 设置老婆"
             if target_user_id != user_id
@@ -884,10 +1319,16 @@ async def _cmd_waifu(
     elif command == "check":
         if not is_admin:
             await matcher.finish("只有管理员可以查看他人的每日老婆")
+        at_ids = _at_user_ids(event)
         target = arg.strip()
-        if not target.isdigit():
-            await matcher.finish("用法：/waifu check <QQ号>")
-        target_user_id = int(target)
+        if at_ids:
+            target_user_id = at_ids[0]
+        elif target.isdigit() and int(target) > 0:
+            target_user_id = int(target)
+        else:
+            await matcher.finish(
+                "用法：/waifu check @某人 或 /waifu check <QQ号>"
+            )
         existing = waifu.get_today_waifu(target_user_id)
         if existing is None:
             await matcher.finish(f"用户 {target_user_id} 今天还没有每日老婆")
@@ -912,21 +1353,34 @@ async def _cmd_waifu(
         if not is_admin:
             await matcher.finish("只有管理员可以重置每日老婆")
         target = arg.strip()
-        if not target or target.lower() == "all":
-            count = waifu.reset_waifu(None)
+        at_ids = _at_user_ids(event)
+        target_user_id: int | None = None
+        if at_ids:
+            target_user_id = at_ids[0]
+        elif target.isdigit() and int(target) > 0:
+            target_user_id = int(target)
+        if target_user_id is None and (not target or target.lower() == "all"):
+            count, can_undo = waifu.reset_waifu_with_undo(None)
+            suffix = "，可用 /waifu undo 撤销" if can_undo else ""
             await matcher.finish(
-                f"已重置全部用户的每日老婆（{count} 人），今天可以重新抽取"
+                f"已重置全部用户的每日老婆（{count} 人），今天可以重新抽取{suffix}"
             )
-        if target.isdigit():
-            count = waifu.reset_waifu(int(target))
+        if target_user_id is not None:
+            count, can_undo = waifu.reset_waifu_with_undo(target_user_id)
             if count:
-                await matcher.finish(f"已重置用户 {target} 的每日老婆")
-            await matcher.finish(f"用户 {target} 今天还没有每日老婆")
-        await matcher.finish("用法：/waifu reset [all|<QQ号>]")
+                suffix = "，可用 /waifu undo 撤销" if can_undo else ""
+                await matcher.finish(
+                    f"已重置用户 {target_user_id} 的每日老婆{suffix}"
+                )
+            await matcher.finish(
+                f"用户 {target_user_id} 今天还没有每日老婆"
+            )
+        await matcher.finish("用法：/waifu reset [all|@某人|<QQ号>]")
     else:
         await matcher.finish(
-            "用法：/waifu [reroll|set <角色名>|check <QQ号>|2025|"
-            "stats [天数]|collection [yuzu]|settings|reset [all|<QQ号>]]"
+            "用法：/waifu [reroll|set [@某人|<QQ号>] <角色名>|"
+            "check [@某人|<QQ号>]|2025|collection [yuzu]|"
+            "settings|reset [all|@某人|<QQ号>]|undo]"
         )
 
 
@@ -954,7 +1408,7 @@ async def _yuzusoft_ids() -> list[str]:
     global _yuzusoft_ids_cache
     if _yuzusoft_ids_cache is None:
         search_names = [
-            str(name) for name in companies.COMPANIES["yuzusoft"]["search"]
+            str(name) for name in companies.fixed_search_names("yuzusoft")
         ]
         ids = library.resolve_company_ids(search_names)
         if not ids:
@@ -973,10 +1427,7 @@ async def _company_ids(company_key: str) -> list[str]:
     cached = _fixed_company_ids_cache.get(company_key)
     if cached is not None:
         return cached
-    search_names = [
-        str(name)
-        for name in companies.COMPANIES[company_key]["search"]
-    ]
+    search_names = companies.fixed_search_names(company_key)
     ids = library.resolve_company_ids(search_names)
     if not ids:
         try:
@@ -1275,27 +1726,6 @@ def _at_user_ids(event: MessageEvent) -> list[int]:
     return result
 
 
-async def _member_name(group_id: int, user_id: int) -> str:
-    """取群名片/昵称用于展示；取不到时回退 QQ 号。"""
-    try:
-        bot = nonebot.get_bot()
-        info = await bot.get_group_member_info(
-            group_id=int(group_id), user_id=int(user_id), no_cache=False
-        )
-    except Exception:
-        return str(user_id)
-    if not isinstance(info, dict):
-        return str(user_id)
-    card = str(info.get("card") or "").strip()
-    nickname = str(info.get("nickname") or "").strip()
-    return card or nickname or str(user_id)
-
-
-async def _noop_name(user_id: int) -> str:
-    """私聊等无群环境：直接展示 QQ 号。"""
-    return str(user_id)
-
-
 def _trade_pick_hint(user_id: int, target_user_id: int) -> str:
     """交易前提示：列出双方今天的每日老婆（每人只有一张，无需卡号）。"""
     lines: list[str] = []
@@ -1374,27 +1804,6 @@ async def _handle_yuzu_trade(
             await matcher.finish("\n".join(lines))
         await matcher.finish(_trade_pick_hint(user_id, target_user_id))
 
-    if action == "rank":
-        group_id = getattr(event, "group_id", None)
-        records = waifu.all_today_waifu(group_id=group_id)
-        if not records:
-            await matcher.finish("今天还没有人抽到每日老婆")
-        entries = collection.ranking(records)
-        # 展示群名片/昵称（并发获取，取不到回退 QQ 号）
-        names = await asyncio.gather(
-            *(_member_name(group_id, uid) if group_id else _noop_name(uid) for uid, _, _ in entries)
-        )
-        lines = ["【今日每日老婆稀有度排行】"]
-        my_rank = "未上榜"
-        for index, (uid, stars, rarity) in enumerate(entries, start=1):
-            display = names[index - 1]
-            line = f"{index}. {display}：{stars}★{rarity}"
-            lines.append(line)
-            if uid == user_id:
-                my_rank = str(index)
-        lines.append(f"你的排名：第 {my_rank} 名")
-        await matcher.finish("\n".join(lines))
-
     if action == "collection":
         # 会社专属图鉴：检索/序号都限定在该会社内
         company_source = (
@@ -1404,7 +1813,19 @@ async def _handle_yuzu_trade(
         command = companies.FIXED_WAIFU_COMMANDS.get(
             company_source or "", "/waifu"
         )
-        keyword = value.strip()
+        keyword, page = _extract_page(value)
+        if keyword:
+            if keyword.lower() in _SEARCH_ONLY_WORDS:
+                await matcher.finish(
+                    f"用法：{command} collection search <关键词>"
+                )
+            search_match = _SEARCH_PREFIX_RE.match(keyword)
+            if search_match:
+                keyword = search_match.group(1).strip()
+                if not keyword:
+                    await matcher.finish(
+                        f"用法：{command} collection search <关键词>"
+                    )
         await asyncio.to_thread(collection_book.enrich_from_library, user_id)
         if keyword in ("usage", "help", "用法", "帮助"):
             suffix = f"\n（当前为{label}图鉴模式）" if label else ""
@@ -1415,14 +1836,28 @@ async def _handle_yuzu_trade(
             )
             if not matches:
                 await matcher.finish(
-                    f"{label or ''}图鉴里没有找到「{keyword}」相关的角色"
+                    f"{label or ''}图鉴里没有找到「{keyword}」相关的角色，"
+                    "试试更短的名字或作品名"
                 )
             if len(matches) > 1:
-                names = [_display_name(m) for m in matches[:10]]
-                hint = f"找到多个{label}角色：\n" + "\n".join(
-                    f"{i + 1}. {name}" for i, name in enumerate(names)
-                ) + f"\n发序号或更精确的名字查看卡片：{command} collection <序号|名字>"
-                await matcher.finish(hint)
+                lines = [f"找到 {len(matches)} 个{label}匹配角色："]
+                for match in matches[:8]:
+                    index = collection_book.collection_index(
+                        user_id,
+                        str(match.get("character_id") or ""),
+                        company_source=company_source,
+                    )
+                    name_prefix = f"{index}. " if index else "- "
+                    lines.append(name_prefix + _display_name(match))
+                if len(matches) > 8:
+                    lines.append(
+                        f"……另有 {len(matches) - 8} 个匹配，请缩小关键词"
+                    )
+                lines.append(
+                    f"发序号或更精确的名字查看卡片："
+                    f"{command} collection <序号|名字>"
+                )
+                await matcher.finish("\n".join(lines))
             record = matches[0]
             reply_image = await _record_reply_image(record)
             note = (
@@ -1432,27 +1867,10 @@ async def _handle_yuzu_trade(
             await matcher.finish(_waifu_reply(event, reply_image, _waifu_text(record, note)))
         await matcher.finish(
             collection_book.collection_text(
-                user_id, company_source=company_source
-            )
-        )
-
-    if action == "stats":
-        if not permissions.is_admin(user_id):
-            await matcher.finish("只有管理员可以查看抽取统计")
-        days = 7
-        if value.strip():
-            try:
-                parsed_days = int(value.strip())
-                if 1 <= parsed_days <= 30:
-                    days = parsed_days
-            except ValueError:
-                pass
-        fixed_source = (
-            source if source in companies.FIXED_WAIFU_COMPANIES else None
-        )
-        await matcher.finish(
-            stats.week_top_text(
-                days=days, limit=10, source=fixed_source
+                user_id,
+                company_source=company_source,
+                page=page,
+                command=f"{command} collection",
             )
         )
 
@@ -1468,15 +1886,42 @@ async def _handle_yuzu_trade(
             await matcher.finish(str(exc))
         my_record = waifu.get_today_waifu(user_id)
         their_record = waifu.get_today_waifu(target_user_id)
+        group_id = getattr(event, "group_id", None)
+        notified = False
+        if group_id is not None:
+            notice = (
+                f" 收到来自 {user_id} 的每日老婆交易提议 #{trade['id']}\n"
+                "对方给出：\n"
+                f"{collection.waifu_display(my_record)}\n"
+                "你需要给出：\n"
+                f"{collection.waifu_display(their_record)}\n"
+                "10 分钟内回复：/waifu accept（拒绝：/waifu reject）"
+            )
+            try:
+                await matcher.send(
+                    Message(
+                        [
+                            MessageSegment.at(target_user_id),
+                            MessageSegment.text(notice),
+                        ]
+                    )
+                )
+                notified = True
+            except Exception as exc:
+                nonebot.logger.warning("waifu 交易提醒发送失败：{}", exc)
+        if notified:
+            hint = "已在群里 @ 提醒对方，等待对方在 10 分钟内确认"
+        else:
+            hint = "请让对方在 10 分钟内发送 /waifu accept"
         lines = [
             f"交易提议 #{trade['id']}",
             "你给出：",
             collection.waifu_display(my_record),
             "你想换取：",
             collection.waifu_display(their_record),
-            f"请在 10 分钟内让 @{target_user_id} 确认：",
-            "/waifu accept",
-            "拒绝：/waifu reject（不用交易号）",
+            hint,
+            "接受：/waifu accept（由对方操作）",
+            "拒绝：/waifu reject（由对方操作）",
         ]
         await matcher.finish("\n".join(lines))
 

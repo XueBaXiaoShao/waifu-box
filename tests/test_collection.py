@@ -224,14 +224,3 @@ def test_pending_multiple(tmp_path, monkeypatch) -> None:
     collection.propose_trade(333, 222)
     assert len(collection.pending_incoming(222)) == 2
     assert len(collection.pending_outgoing(111)) == 1
-
-
-def test_ranking(tmp_path, monkeypatch) -> None:
-    _set_today(tmp_path, monkeypatch, 1, "c1", "primary")  # 5★
-    _set_today(tmp_path, monkeypatch, 2, "c3", "main")  # 4★
-    _set_today(tmp_path, monkeypatch, 3, "c4", "side")  # 3★
-    records = waifu.all_today_waifu()
-    entries = collection.ranking(records)
-    assert entries == [(1, 5, "SSR"), (2, 4, "SR"), (3, 3, "R")]
-    # 按群过滤
-    assert waifu.all_today_waifu(group_id=999) == []

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -225,6 +225,30 @@ def get_today_waifu(user_id: int) -> dict[str, Any] | None:
     return None
 
 
+def omikuji_yuzu_character(
+    user_id: int,
+) -> library.LibraryCharacter | None:
+    """读取当天 omikuji 选中的柚子社角色，供 /yuzuwaifu 对齐。"""
+    try:
+        payload = json.loads(
+            (Path(config.data_dir) / "omikuji_yuzu.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError):
+        return None
+    users = payload.get("users") if isinstance(payload, dict) else None
+    record = users.get(str(int(user_id))) if isinstance(users, dict) else None
+    if not isinstance(record, dict):
+        return None
+    if str(record.get("date") or "") != _today():
+        return None
+    library_path = str(record.get("library_path") or "").strip()
+    if not library_path:
+        return None
+    return library.get_character_by_path(library_path)
+
+
 def save_waifu(
     user_id: int,
     character: VNDBCharacter,
@@ -255,10 +279,9 @@ def save_waifu(
         payload = _load()
         payload.setdefault("users", {})[str(user_id)] = record
         _write(payload)
-    from . import collection_book, stats
+    from . import collection_book
 
     collection_book.rec_collect(user_id, record)
-    stats.record_draw(character.id, character.original or character.name, source=source)
     return record
 
 
@@ -310,26 +333,6 @@ def taken_character_ids(group_id: int, exclude_user_id: int) -> set[str]:
     return result
 
 
-def all_today_waifu(group_id: int | None = None) -> list[tuple[int, dict[str, Any]]]:
-    """全部用户今天的每日老婆；可选按抽卡群过滤。"""
-    payload = _load()
-    users = payload.get("users", {})
-    today = _today()
-    result: list[tuple[int, dict[str, Any]]] = []
-    if not isinstance(users, dict):
-        return result
-    for uid, record in users.items():
-        if not isinstance(record, dict) or record.get("date") != today:
-            continue
-        if (
-            group_id is not None
-            and record.get("group_id") != str(group_id)
-        ):
-            continue
-        result.append((int(uid), record))
-    return result
-
-
 def reset_waifu(user_id: int | None) -> int:
     """重置每日老婆：user_id 为 None 时清空所有人，否则只清指定用户；返回清除数。"""
     with _lock:
@@ -343,3 +346,99 @@ def reset_waifu(user_id: int | None) -> int:
             users.pop(str(user_id), None)
         _write(payload)
         return count
+
+
+def _undo_file() -> Path:
+    return Path(config.data_dir) / "waifu_reset_undo.json"
+
+
+def _load_undo_entries() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(_undo_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    return entries if isinstance(entries, list) else []
+
+
+def _write_undo_entries(entries: list[dict[str, Any]]) -> None:
+    path = _undo_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {"version": 1, "entries": entries[-10:]},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def reset_waifu_with_undo(user_id: int | None) -> tuple[int, bool]:
+    """重置并保存一份可撤销快照；返回（清除数, 是否有可撤销记录）。"""
+    with _lock:
+        payload = _load()
+        users = payload.get("users")
+        if not isinstance(users, dict):
+            users = {}
+        if user_id is None:
+            snapshot = dict(users)
+            count = len(users)
+            payload["users"] = {}
+        else:
+            record = users.get(str(user_id))
+            snapshot = {str(user_id): record} if record is not None else {}
+            count = 1 if record is not None else 0
+            users.pop(str(user_id), None)
+        _write(payload)
+        if snapshot:
+            entries = _load_undo_entries()
+            entries.append(
+                {
+                    "ts": datetime.now().isoformat(timespec="seconds"),
+                    "kind": "all" if user_id is None else "user",
+                    "target": user_id,
+                    "records": snapshot,
+                }
+            )
+            _write_undo_entries(entries)
+        return count, bool(snapshot)
+
+
+def undo_last_reset() -> dict[str, Any] | None:
+    """撤销最近一次 reset；不覆盖重置后已重新抽卡的用户。"""
+    with _lock:
+        entries = _load_undo_entries()
+        if not entries:
+            return None
+        entry = entries.pop()
+        _write_undo_entries(entries)
+        payload = _load()
+        users = payload.get("users")
+        if not isinstance(users, dict):
+            users = {}
+            payload["users"] = users
+        restored = 0
+        skipped = 0
+        records = entry.get("records") if isinstance(entry, dict) else {}
+        if not isinstance(records, dict):
+            records = {}
+        for uid, record in records.items():
+            if uid in users:
+                skipped += 1
+                continue
+            users[uid] = record
+            restored += 1
+        if restored:
+            _write(payload)
+        return {
+            "kind": entry.get("kind"),
+            "target": entry.get("target"),
+            "restored": restored,
+            "skipped": skipped,
+            "total": len(records),
+            "ts": entry.get("ts"),
+        }

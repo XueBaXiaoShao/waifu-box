@@ -157,3 +157,45 @@ def test_sync_from_state_backfills(tmp_path, monkeypatch) -> None:
     assert "c9" in collection_book.user_collection(333)
     # 幂等
     assert collection_book.sync_from_state(333) is False
+
+
+def test_reset_with_undo_restores_all_and_user(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    waifu.save_waifu(1, _character("c1"))
+    waifu.save_waifu(2, _character("c2"))
+
+    count, can_undo = waifu.reset_waifu_with_undo(None)
+    assert count == 2 and can_undo is True
+    assert waifu.get_today_waifu(1) is None
+    assert waifu.get_today_waifu(2) is None
+
+    info = waifu.undo_last_reset()
+    assert info is not None
+    assert info["restored"] == 2
+    assert info["skipped"] == 0
+    assert waifu.get_today_waifu(1)["character_id"] == "c1"
+    assert waifu.get_today_waifu(2)["character_id"] == "c2"
+    assert waifu.undo_last_reset() is None
+
+    waifu.save_waifu(3, _character("c3"))
+    count, can_undo = waifu.reset_waifu_with_undo(3)
+    assert count == 1 and can_undo is True
+    assert waifu.get_today_waifu(3) is None
+    assert waifu.undo_last_reset()["restored"] == 1
+    assert waifu.get_today_waifu(3)["character_id"] == "c3"
+
+
+def test_undo_does_not_overwrite_post_reset_draw(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
+    waifu.save_waifu(1, _character("c1"))
+    waifu.save_waifu(2, _character("c2"))
+    waifu.reset_waifu_with_undo(None)
+
+    waifu.save_waifu(1, _character("c-new"))
+    info = waifu.undo_last_reset()
+
+    assert info is not None
+    assert info["restored"] == 1
+    assert info["skipped"] == 1
+    assert waifu.get_today_waifu(1)["character_id"] == "c-new"
+    assert waifu.get_today_waifu(2)["character_id"] == "c2"
