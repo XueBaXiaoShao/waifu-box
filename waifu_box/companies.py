@@ -152,6 +152,8 @@ FIXED_WAIFU_COMPANIES = {
     "august": "august",
     "nitro": "nitroplus",
     "qruppo": "qruppo",
+    "cube": "cube",
+    "cuffs": "cuffs",
 }
 
 # 固定会社入口的展示名/命令/图鉴标签
@@ -172,6 +174,8 @@ FIXED_WAIFU_LABELS = {
     "august": "August（八月社）",
     "nitro": "Nitroplus（N+社）",
     "qruppo": "Qruppo",
+    "cube": "CUBE",
+    "cuffs": "CUFFS",
 }
 
 FIXED_WAIFU_COMMANDS = {
@@ -191,6 +195,8 @@ FIXED_WAIFU_COMMANDS = {
     "august": "/augustwaifu",
     "nitro": "/nitroplus",
     "qruppo": "/qruppowaifu",
+    "cube": "/cubewaifu",
+    "cuffs": "/cuffswaifu",
 }
 
 FIXED_WAIFU_TAGS = {
@@ -210,12 +216,16 @@ FIXED_WAIFU_TAGS = {
     "august": "八",
     "nitro": "N+",
     "qruppo": "Q",
+    "cube": "CUBE",
+    "cuffs": "CUFFS",
 }
 
 # 固定入口的搜索名覆盖：HOOKSOFT 的全局会社分组仍包含 SMEE/ASa，
 # 但 /hookwaifu 只抽 HOOKSOFT 本体；SMEE/ASa 有各自入口。
 FIXED_WAIFU_SEARCH = {
     "hooksoft": ["HOOKSOFT", "Hooksoft"],
+    # CUFFS 本体只取 p172，不要把 CUBE/Sphere/MintCUBE 并入 /cuffswaifu
+    "cuffs": ["CUFFS"],
 }
 
 

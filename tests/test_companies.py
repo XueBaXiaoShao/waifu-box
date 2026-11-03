@@ -106,6 +106,24 @@ def test_fixed_waifu_includes_new_special_pools() -> None:
     assert companies.FIXED_WAIFU_LABELS["qruppo"] == "Qruppo"
 
 
+def test_fixed_waifu_includes_cube_pool() -> None:
+    """CUBE 作为独立会社卡池入口。"""
+    assert companies.FIXED_WAIFU_COMPANIES["cube"] == "cube"
+    assert companies.FIXED_WAIFU_COMMANDS["cube"] == "/cubewaifu"
+    assert companies.FIXED_WAIFU_LABELS["cube"] == "CUBE"
+    assert companies.FIXED_WAIFU_TAGS["cube"] == "CUBE"
+    assert companies.fixed_search_names("cube") == ["CUBE"]
+
+
+def test_fixed_waifu_includes_cuffs_pool() -> None:
+    """CUFFS 作为独立会社卡池入口（不并入 CUBE/Sphere）。"""
+    assert companies.FIXED_WAIFU_COMPANIES["cuffs"] == "cuffs"
+    assert companies.FIXED_WAIFU_COMMANDS["cuffs"] == "/cuffswaifu"
+    assert companies.FIXED_WAIFU_LABELS["cuffs"] == "CUFFS"
+    assert companies.FIXED_WAIFU_TAGS["cuffs"] == "CUFFS"
+    assert companies.fixed_search_names("cuffs") == ["CUFFS"]
+
+
 def test_fixed_waifu_search_splits_hooksoft_brands() -> None:
     """固定入口按品牌拆分：HOOKSOFT 本体、SMEE、ASa Project 各自独立。"""
     assert companies.fixed_search_names("hooksoft") == ["HOOKSOFT", "Hooksoft"]

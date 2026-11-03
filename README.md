@@ -9,7 +9,6 @@
 | --- | --- |
 | `/waifu` | 从 `final_company_library` 抽每日老婆，生成角色信息卡片（左立绘 / 右信息简介 / 右下会社 logo） |
 | `/waifu <会社>` | 指定会社抽卡，如 `/waifu yuzu`、`/waifu hook`、`/waifu smee`；等价于 `/yuzuwaifu` 等专属指令 |
-| `/waifu 2025` | 从 2025 新收录作品池抽取（与 `/waifu` 共享每日额度） |
 | `/yuzuwaifu` | 柚子社专属老婆（固定 Yuzusoft，同样输出角色卡片，与 `/waifu` 共享每日额度） |
 | `/keywaifu` | Key 专属老婆（固定 Key，与 `/waifu` 共享每日额度） |
 | `/sagawaifu` | SAGA PLANETS 专属老婆（固定 SAGA PLANETS，与 `/waifu` 共享每日额度） |
@@ -26,6 +25,8 @@
 | `/augustwaifu` | August（八月社）专属老婆（与 `/waifu` 共享每日额度） |
 | `/nitroplus` | Nitroplus（N+社）专属老婆（与 `/waifu` 共享每日额度） |
 | `/qruppowaifu` | Qruppo 专属老婆（与 `/waifu` 共享每日额度） |
+| `/cubewaifu` | CUBE 专属老婆（与 `/waifu` 共享每日额度） |
+| `/cuffswaifu` | CUFFS 专属老婆（与 `/waifu` 共享每日额度） |
 | `/waifu settings` | 查看/修改抽卡设置（热度、年代、全局会社池、抽卡黑名单；仅管理员） |
 | `/waifu settings pool set|off` | 设置 final_company_library 全量会社池 / 关闭 |
 | `/waifu settings exclude add|remove|list` | 管理抽卡黑名单 |
@@ -36,7 +37,7 @@
 | `/waifu undo` | 撤销最近一次 reset（仅管理员，不覆盖重置后重新抽到的老婆） |
 | `/waifu check [@某人|<QQ号>]` | 查看指定用户今天抽到的老婆（仅管理员） |
 | `/waifu set [@某人|<QQ号>] <角色名或cID>` | 管理员指定/代指定（绕过全部规则） |
-| `/waifu collection [yuzu|key|saga|purple|front|crystal|hook|smee|asa|mado|pal|favo|makura|august|nitro|qruppo] [page N]` | 查看我的角色图鉴（每页 8 个，抽到自动收录，支持检索/序号查看） |
+| `/waifu collection [yuzu|key|saga|purple|front|crystal|hook|smee|asa|mado|pal|favo|makura|august|nitro|qruppo|cube|cuffs] [page N]` | 查看我的角色图鉴（每页 8 个，抽到自动收录，支持检索/序号查看） |
 | `/waifu collection @某人 [page N]` | 查看他人图鉴（仅管理员；也可改用 QQ 号） |
 | `/waifu collection search <关键词>` | 搜索图鉴中的角色（名字/中文名/罗马音/作品名）；无结果会提示 |
 | `/yuzuwaifu collection [page N|search <关键词>]` / `/keywaifu collection` 等 | 只看对应会社的图鉴（同样每页 8 个，支持搜索） |
@@ -56,9 +57,9 @@
 - 会社专属入口（`/yuzuwaifu`、`/keywaifu`、`/sagawaifu`、`/purplewaifu`、
   `/frontwaifu`、`/crystalwaifu`、`/hookwaifu`、`/smeewaifu`、`/asawaifu`、
   `/madowaifu`、`/palwaifu`、`/favowaifu`、`/makurawaifu`、`/augustwaifu`、
-  `/nitroplus`、`/qruppowaifu`）在本地库中固定抽对应会社，同样输出卡片、
+  `/nitroplus`、`/qruppowaifu`、`/cubewaifu`、`/cuffswaifu`）在本地库中固定抽对应会社，同样输出卡片、
   保持随机、不参与 LRU；
-- `/waifu`、`/waifu 2025` 与所有会社专属入口共享每日额度，当天只能抽一张；
+- `/waifu` 与所有会社专属入口共享每日额度，当天只能抽一张；
 - 若用户当天先抽 `/omikuji` 再抽 `/yuzuwaifu`，`/yuzuwaifu` 会沿用 omikuji
   选中的柚子社角色（此时同群不重复规则让位）；其他入口不受影响；
 - **同群不重复**：每个群每天内，后抽的用户会自动避开本群今天已被其他人抽到
@@ -98,8 +99,8 @@
   罗马音/作品名；会社入口同样支持（如 `/keywaifu collection search 四季`）；
   没有匹配时会提示用户换更短的关键词；
 - 各会社入口的 `collection`（如 `/yuzuwaifu collection`、`/makurawaifu collection`、
-  `/nitroplus collection`、`/qruppowaifu collection`）只看对应会社
-  （`/waifu collection yuzu|key|saga|purple|makura|august|nitro|qruppo` 等价）。
+  `/nitroplus collection`、`/qruppowaifu collection`、`/cubewaifu collection`、`/cuffswaifu collection`）只看对应会社
+  （`/waifu collection yuzu|key|saga|purple|makura|august|nitro|qruppo|cube|cuffs` 等价）。
 
 ## 配置（环境变量）
 

@@ -603,40 +603,6 @@ async def test_waifu_draws_from_local_library_and_sends_card(
     assert "你今天的老婆" not in str(matcher.sent[-1])
 
 
-async def test_waifu_2025_draws_from_new_games_and_shares_quota(
-    monkeypatch, tmp_path
-) -> None:
-    """/waifu 2025 从限定作品池抽取，与普通 /waifu 共享每日额度。"""
-    monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path / "data"))
-    monkeypatch.setattr(waifu_usage.config, "data_dir", str(tmp_path / "data"))
-    library_root = tmp_path / "final_company_library"
-    _build_fake_library(library_root)
-    monkeypatch.setattr(library.config, "library_dir", str(library_root))
-    library.reset_cache()
-
-    async def fake_render(character):
-        return b"JPEG-CARD"
-
-    monkeypatch.setattr(commands.card, "render_character_card", fake_render)
-    monkeypatch.setattr(commands, "NEW_GAME_IDS", ["v1"])
-    matcher = _FakeMatcher()
-
-    # 第一次抽：写入普通 waifu 额度
-    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), "2025"))
-    record = waifu.get_today_waifu(123)
-    assert record is not None
-    assert record["source"] == "waifu"
-    assert record["character_id"] == "c1"
-    assert waifu_usage.last_used("c1") is not None
-    assert "2025" in str(matcher.sent[-1])
-
-    # 已抽过：重复展示，不再新抽
-    sent_before = len(matcher.sent)
-    await _run(commands._cmd_waifu(matcher, _FakeEvent(123), "2025"))
-    assert len(matcher.sent) == sent_before + 1
-    assert "重复展示" in str(matcher.sent[-1])
-
-
 async def test_yuzuwaifu_uses_omikuji_pick(
     monkeypatch, tmp_path
 ) -> None:
@@ -1255,6 +1221,12 @@ def test_fixed_company_command_rules() -> None:
     assert commands._is_slash_qruppowaifu(_E("/qruppowaifu"))
     assert commands._is_slash_qruppowaifu(_E("/qruppowaifu collection"))
     assert not commands._is_slash_qruppowaifu(_E("/qruppowaifu2"))
+    assert commands._is_slash_cubewaifu(_E("/cubewaifu"))
+    assert commands._is_slash_cubewaifu(_E("/cubewaifu collection"))
+    assert not commands._is_slash_cubewaifu(_E("/cubewaifu2"))
+    assert commands._is_slash_cuffswaifu(_E("/cuffswaifu"))
+    assert commands._is_slash_cuffswaifu(_E("/cuffswaifu collection"))
+    assert not commands._is_slash_cuffswaifu(_E("/cuffswaifu2"))
     assert not commands._is_slash_frontwaifu(_E("/frontwaifu2"))
 
 
@@ -1344,6 +1316,8 @@ def _prepare_company_test(monkeypatch, tmp_path, directory: str, company_id: str
         ("august", "AUGUST", "p95", "AUGUST", "c503", "August酱"),
         ("nitro", "ニトロプラス", "p42", "NITRO PLUS", "c505", "Nitro酱"),
         ("qruppo", "Qruppo", "p7659", "Qruppo", "c507", "Qruppo酱"),
+        ("cube", "CUBE", "p735", "CUBE", "c508", "CUBE酱"),
+        ("cuffs", "CUFFS", "p172", "CUFFS", "c510", "CUFFS酱"),
     ],
 )
 async def test_company_waifu_draws_local_card(
@@ -1926,6 +1900,8 @@ async def test_waifu_help_lists_special_pools() -> None:
     assert "/makurawaifu" in text
     assert "/augustwaifu" in text
     assert "/nitroplus" in text
+    assert "/cubewaifu" in text
+    assert "/cuffswaifu" in text
     assert "stats" not in text
     assert "rank" not in text
 
@@ -1942,6 +1918,8 @@ async def test_waifu_help_lists_special_pools() -> None:
         ("nitroplus", "ニトロプラス", "p42", "NITRO PLUS", "c606", "Nitro酱", "nitro"),
         ("qruppo", "Qruppo", "p7659", "Qruppo", "c607", "Qruppo酱", "qruppo"),
         ("qroppo", "Qruppo", "p7659", "Qruppo", "c608", "Qruppo酱", "qruppo"),
+        ("cube", "CUBE", "p735", "CUBE", "c609", "CUBE酱", "cube"),
+        ("cuffs", "CUFFS", "p172", "CUFFS", "c511", "CUFFS酱", "cuffs"),
     ],
 )
 async def test_waifu_company_prefix_selects_pool(

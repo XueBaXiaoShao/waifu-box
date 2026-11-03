@@ -33,17 +33,6 @@ from . import (
 from .config import config
 from .models import Image, VNDBCharacter, VnRef
 
-# /waifu 2025 限定作品（新收录作品的 VNDB ID；已下放普通池，这里仅作限定抽取入口）
-NEW_GAME_IDS = [
-    "v62721", "v50215",
-    "v63385", "v57252", "v57740", "v58009", "v56400", "v60562",
-    "v56862", "v60096", "v60213", "v62700", "v63472", "v59534",
-    "v59419", "v60196", "v60395", "v60646", "v59520", "v56147",
-    "v60663", "v62286", "v56343", "v61834", "v57718", "v52407",
-    "v61216", "v61093", "v63384", "v52780", "v59519", "v61200",
-    "v66374", "v58614", "v63082",
-]
-
 
 def _is_slash_waifu(event: MessageEvent) -> bool:
     """/waifu 入口只认带斜杠的命令。"""
@@ -84,6 +73,8 @@ _is_slash_makurawaifu = _is_slash_fixed_waifu("makurawaifu")
 _is_slash_augustwaifu = _is_slash_fixed_waifu("augustwaifu")
 _is_slash_nitroplus = _is_slash_fixed_waifu("nitroplus")
 _is_slash_qruppowaifu = _is_slash_fixed_waifu("qruppowaifu")
+_is_slash_cubewaifu = _is_slash_fixed_waifu("cubewaifu")
+_is_slash_cuffswaifu = _is_slash_fixed_waifu("cuffswaifu")
 _is_slash_nagato = _is_slash_fixed_waifu("nagato")
 
 
@@ -267,6 +258,14 @@ def _collection_alias_source(keyword: str) -> str | None:
         "qruppo": "qruppo",
         "qroppo": "qruppo",
         "qr": "qruppo",
+        "cube": "cube",
+        "cube社": "cube",
+        "立方": "cube",
+        "立方社": "cube",
+        "cuffs": "cuffs",
+        "cuff": "cuffs",
+        "cuffs社": "cuffs",
+        "卡夫斯": "cuffs",
     }
     return aliases.get((keyword or "").strip().lower())
 
@@ -381,18 +380,23 @@ nitroplus_short = on_command(
 qruppowaifu_short = on_command(
     "qruppowaifu", rule=_is_slash_qruppowaifu, priority=1, block=True
 )
+cubewaifu_short = on_command(
+    "cubewaifu", rule=_is_slash_cubewaifu, priority=1, block=True
+)
+cuffswaifu_short = on_command(
+    "cuffswaifu", rule=_is_slash_cuffswaifu, priority=1, block=True
+)
 
 
 def _help_text() -> str:
     return """【每日老婆】
 - /waifu —— 抽今日老婆；/waifu <会社> 指定会社（如 yuzu、hook、makura、august、nitro）
-- /waifu 2025 —— 2025 新收录作品池
 - /waifu collection [page N|search <关键词>] —— 查看/搜索图鉴
 - /waifu collection @某人 [page N] —— 查看他人图鉴（仅管理员）
 - /waifu list [@某人|<QQ号>] —— 查看今天抽到的老婆
 - /waifu trade @对方 / accept / reject / cancel —— 今日老婆交易
 - 管理员：/waifu settings（含群会社/年代后门）、reset、undo、check、set
-- 会社专属入口：/yuzuwaifu、/keywaifu、/makurawaifu、/augustwaifu、/nitroplus、/qruppowaifu 等（共享每日额度，支持 collection/trade）"""
+- 会社专属入口：/yuzuwaifu、/keywaifu、/makurawaifu、/augustwaifu、/nitroplus、/qruppowaifu、/cubewaifu、/cuffswaifu 等（共享每日额度，支持 collection/trade）"""
 
 
 @waifu_short.handle()
@@ -656,6 +660,28 @@ async def handle_qruppowaifu_short(
     )
 
 
+@cubewaifu_short.handle()
+async def handle_cubewaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "cube", "cubewaifu"
+    )
+
+
+@cuffswaifu_short.handle()
+async def handle_cuffswaifu_short(
+    event: MessageEvent,
+    matcher: Matcher,
+    arg: Message = CommandArg(),
+) -> None:
+    await _handle_fixed_waifu_short(
+        event, matcher, arg, "cuffs", "cuffswaifu"
+    )
+
+
 def _image_segment(url_or_base64: str | None) -> MessageSegment | None:
     if not url_or_base64:
         return None
@@ -841,7 +867,7 @@ async def _draw_local_character(
 
     全局会社池为随机单会社，可能随机到库内无可用角色的会社
     （如 2010+ 年代过滤后为空），此时重新随机会会社重试，最多 8 次。
-    game_ids 非空时只在指定作品内抽取（如 /waifu 2025 限定新收录作品）。
+    game_ids 非空时只在指定作品内抽取。
     """
     year_from = 0 if group_settings["year_off"] else settings.get("year_from", 0)
     year_to = 0 if group_settings["year_off"] else settings.get("year_to", 0)
@@ -1055,55 +1081,6 @@ async def _cmd_waifu(
         await matcher.finish(
             "Special Thanks to 病毒@kitsurato. "
             "病毒@kitsurato様のご協力誠にありがとうございます。"
-        )
-
-    if command == "2025":
-        # 新收录作品池：与普通 /waifu 共享每日额度
-        existing = waifu.get_today_waifu(user_id)
-        if existing:
-            reply_image = await _record_reply_image(existing)
-            repeat_note = _repeat_note(existing)
-            await matcher.finish(
-                _waifu_reply(
-                    event,
-                    reply_image,
-                    _waifu_text(existing, repeat_note),
-                )
-            )
-        settings = waifu.load_settings()
-        group_settings = _event_group_settings(event)
-        exclude_ids = (
-            waifu.taken_character_ids(group_id, user_id)
-            if group_id is not None
-            else set()
-        )
-        local = await _draw_local_character(
-            settings,
-            group_settings,
-            "waifu",
-            exclude_ids,
-            game_ids=NEW_GAME_IDS,
-        )
-        if local is None:
-            await matcher.finish("新收录作品池暂时抽不到老婆，请稍后再试")
-        character = _to_vndb_character(local)
-        record = waifu.save_waifu(
-            user_id,
-            character,
-            source="waifu",
-            library_path=_library_path(local),
-            group_id=group_id,
-            role=str(local.data.get("role") or ""),
-        )
-        waifu_usage.mark_used(character.id)
-        image_url = await _local_reply_image(local, record.get("image_url") or "")
-        note = "【2025 新收录作品池】" + _collection_note(user_id, record)
-        await matcher.finish(
-            _waifu_reply(
-                event,
-                image_url,
-                _waifu_text(record, note),
-            )
         )
 
     if command == "settings":
@@ -1379,7 +1356,7 @@ async def _cmd_waifu(
     else:
         await matcher.finish(
             "用法：/waifu [reroll|set [@某人|<QQ号>] <角色名>|"
-            "check [@某人|<QQ号>]|2025|collection [yuzu]|"
+            "check [@某人|<QQ号>]|collection [yuzu]|"
             "settings|reset [all|@某人|<QQ号>]|undo]"
         )
 

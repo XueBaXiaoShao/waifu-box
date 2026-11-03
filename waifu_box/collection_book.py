@@ -1,6 +1,6 @@
 """角色图鉴：记录每位用户抽到过的全部角色。
 
-抽卡（/waifu、/yuzuwaifu、2025 池）自动收录到图鉴；同角色只记录一次，
+抽卡（/waifu、会社专属入口）自动收录到图鉴；同角色只记录一次，
 首次抽到时间即收录时间。图鉴数据持久化在 waifu_collection.json。
 
 历史兼容：首次运行时把 waifu_state.json 中尚存的记录导入图鉴
@@ -690,6 +690,8 @@ def usage_text() -> str:
         "- /augustwaifu collection —— 只看 August 角色\n"
         "- /nitroplus collection —— 只看 Nitroplus 角色\n"
         "- /qruppowaifu collection —— 只看 Qruppo 角色\n"
+        "- /cubewaifu collection —— 只看 CUBE 角色\n"
+        "- /cuffswaifu collection —— 只看 CUFFS 角色\n"
         "- /waifu collection <序号> —— 按列表序号查看角色卡片\n"
         "- /waifu collection <名字> —— 按名字检索（支持日文名/中文名/罗马音/作品名）\n"
         "- 抽到过的角色自动收录，重复抽到不会重复计入"
@@ -853,6 +855,8 @@ def collection_text(
             "august": "八月",
             "nitro": "N+",
             "qruppo": "Qruppo",
+            "cube": "CUBE",
+            "cuffs": "CUFFS",
         }
         parts = [
             f"{short_labels[source]} {counts[source]}"
