@@ -1019,41 +1019,21 @@ class _NagatoEvent(_FakeEvent):
         return "/nagato"
 
 
-def test_natsume_text_sets_are_separate() -> None:
-    assert len(commands._NATSUME_HOLY_TEXTS) == 3
-    assert len(commands._NATSUME_NEW_TEXTS) == 4
-    assert len(commands._NATSUME_XIAHEXIAO_TEXTS) == 1
-    assert len(commands._NATSUME_ZAOZI_TEXTS) == 1
-    assert len(commands._NATSUME_ALL_TEXTS) == 9
-    assert any("棗子的舔嘴" in text for text in commands._NATSUME_NEW_TEXTS)
-    assert any("夏和小" in text for text in commands._NATSUME_XIAHEXIAO_TEXTS)
-    assert any(
-        "怎麼会有人不喜歡棗子姐呢" in text
-        for text in commands._NATSUME_ZAOZI_TEXTS
-    )
+def test_natsume_texts_loaded_from_txt() -> None:
+    texts = commands._NATSUME_TEXTS
+    assert len(texts) == 15
+    assert texts[0].startswith("ナツメ！")
+    assert texts[10] == "好想把頭埋到棗子的欧派裏啊"
+    assert texts[14].startswith("本人也好想要個棗子一樣的対象啊")
+    assert any("棗子" in text for text in texts)
+    assert any("夏和小" in text for text in texts)
+    assert any("🤤" in text for text in texts)
+    assert any("🥰" in text for text in texts)
     assert all(
-        not any(emoji in text for emoji in ("🥰", "🤤", "🌃", "🥵"))
-        for text in commands._NATSUME_XIAHEXIAO_TEXTS
-        + commands._NATSUME_ZAOZI_TEXTS
+        not text.startswith(tuple(f"{i}." for i in range(1, 16)))
+        for text in texts
     )
-    assert all(
-        "" not in text
-        for text in commands._NATSUME_XIAHEXIAO_TEXTS
-        + commands._NATSUME_ZAOZI_TEXTS
-    )
-    assert all(
-        text not in commands._NATSUME_HOLY_TEXTS
-        for text in commands._NATSUME_NEW_TEXTS
-    )
-    assert all(
-        text in commands._NATSUME_ALL_TEXTS
-        for text in (
-            commands._NATSUME_HOLY_TEXTS
-            + commands._NATSUME_NEW_TEXTS
-            + commands._NATSUME_XIAHEXIAO_TEXTS
-            + commands._NATSUME_ZAOZI_TEXTS
-        )
-    )
+    assert all(text.strip() == text for text in texts)
 
 
 def test_natsume_slash_rule() -> None:
@@ -1061,7 +1041,7 @@ def test_natsume_slash_rule() -> None:
     assert commands._is_slash_nagato(_FakeEvent(1)) is False
 
 
-async def test_natsume_shortcut_returns_from_all_texts(
+async def test_natsume_shortcut_returns_from_texts(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setattr(waifu.config, "data_dir", str(tmp_path))
@@ -1076,7 +1056,7 @@ async def test_natsume_shortcut_returns_from_all_texts(
     )
 
     sent = str(matcher.sent[-1])
-    assert "本人真的想棗子姐" in sent
+    assert "ナツメ" in sent
 
 
 def test_natsume_state_limit_and_consume(monkeypatch, tmp_path) -> None:
@@ -1143,7 +1123,7 @@ async def test_natsume_shortcut_respects_limit(
             _NagatoEvent(1), matcher, Message("")
         )
     )
-    assert "本人真的想棗子姐" in str(matcher.sent[-1])
+    assert "ナツメ" in str(matcher.sent[-1])
 
     matcher2 = _FakeMatcher()
     await _run(
